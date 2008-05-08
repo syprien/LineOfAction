@@ -15,7 +15,9 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.StringTokenizer;
 
-public class Plateau implements Partie1 {
+//import model.Etat;
+
+public class Plateau implements Partie1/*,Etat*/ {
 	
     static final private byte NOIR = 1;
     static final private byte BLANC = -1;
@@ -26,9 +28,7 @@ public class Plateau implements Partie1 {
     private byte[][] tab;
     private int nbPionNoir;
     private int nbPionBlanc;
-    /**
-     * @param tab
-     */
+
     public Plateau() {
         this.tab = new byte[DIMENSION][DIMENSION];
         for(int i = 0 ;i<DIMENSION; i++) {
@@ -37,21 +37,344 @@ public class Plateau implements Partie1 {
 			}
         }
         for(int i=1;i<7;i++) {
-        	this.tab[0][i] = NOIR;
-        	this.tab[7][i] = NOIR;
-        	this.tab[i][0] = BLANC;
-        	this.tab[i][7] = BLANC;
+        	this.tab[0][i] = BLANC;
+        	this.tab[7][i] = BLANC;
+        	this.tab[i][0] = NOIR;
+        	this.tab[i][7] = NOIR;
         }
         this.nbPionBlanc=12;
         this.nbPionNoir=12;
     }
+    
 
     @Override
     public boolean estValide(String move, String player) {
-        // TODO Syprien : Auto-generated method stub
+        // TODO Syprien : Valider le coup
+
+        Couple[] a = trad(move);
+
+        int x = a[0].getI() - a[1].getI();
+        int y = a[0].getJ() - a[1].getJ();
+
+        int direction = direction(a[0], a[1]);
+
+        int c = 0;
+        /* on test si le pion est bien de la couleur du joueur */
+        if ((this.tab[a[0].getI()][a[0].getJ()] == BLANC && player.compareToIgnoreCase("noir") == 0) ||
+        		(this.tab[a[0].getI()][a[0].getJ()] == NOIR && player.compareToIgnoreCase("blanc") == 0))
+        	return false;
+        /* on test si c'est pas hors du plateau ou si le mouvement ne deplace pas le pion*/
+        if(a[0].getI()<0 || a[1].getI()<0 || a[0].getJ()>=DIMENSION || a[1].getJ()>=DIMENSION 
+        		|| a[0].getJ()<0 || a[1].getJ()<0 || (x == 0 && y ==0)){
+        	return false;
+        }
+        /* on test si la case d'arrive n'est pas déja occupé par un pion de la couleur du joueur */
+        if(this.tab[a[0].getI()][a[0].getJ()] == this.tab[a[1].getI()][a[1].getJ()]) {
+        	return false;
+        }
+        // Horizontale
+        if (direction == 7 || direction == 3) {
+            c = compteHorizonztale(a[0].getJ());
+
+            if (c != Math.abs(x)) {
+                return false;
+            } else {
+                if (direction == 3) {
+                    for (int f = a[0].getI(); f < a[1].getI(); f++) {
+                        if (tab[f][a[0].getJ()] != tab[a[0].getI()][a[0].getJ()] && tab[f][a[0].getJ()] != 0) {
+                            return false;
+                        }
+                        /*if(tab[f][a[0].getJ()] == tab[a[0].getI()][a[0].getJ()] && a[0].getI()!=f 
+                        		&& tab[f-1][a[0].getJ()]!= 0){
+                        	return false;
+                        }*/
+                    }
+                    return true;
+                } else {
+                    for (int f = a[0].getI(); f > a[1].getI(); f--) {
+                        if (tab[f][a[0].getJ()] != tab[a[0].getI()][a[0].getJ()] && tab[f][a[0].getJ()] != 0) {
+                            return false;
+                        }
+                        /*if(tab[f][a[0].getJ()] == tab[a[0].getI()][a[0].getJ()] && a[0].getI()!=f 
+                        		&& tab[f+1][a[0].getJ()]!= 0){
+                        	return false;
+                        }*/
+                    }
+                    return true;
+                }
+            }
+
+            // Verticale
+        } else if (direction == 1 || direction == 5) {
+            c = compteVerticale(a[0].getI());
+            if (c != Math.abs(y)) {
+                return false;
+            } else {
+                if (direction == 1) {
+                    for (int f = a[0].getJ(); f < a[1].getJ(); f++) {
+                        if (tab[a[0].getI()][f] != tab[a[0].getI()][a[0].getJ()] && tab[a[0].getI()][f]!= 0) {
+                            return false;
+                        }
+                        /*if(tab[a[0].getI()][f] == tab[a[0].getI()][a[0].getJ()] && a[0].getJ()!=f 
+                        		&& tab[a[0].getI()][f-1]!= 0){
+                        	return false;
+                        }*/
+                    }
+                    return true;
+                } else {
+                    for (int f = a[0].getJ(); f > a[1].getJ(); f--) {
+                        if (tab[a[0].getI()][f] != tab[a[0].getI()][a[0].getJ()] && tab[a[0].getI()][f]!= 0) {
+                            return false;
+                        }
+                        /*if(tab[a[0].getI()][f] == tab[a[0].getI()][a[0].getJ()] && a[0].getJ()!=f 
+                        		&& tab[a[0].getI()][f+1]!= 0){
+                        	return false;
+                        }*/
+                    }
+                    return true;
+                }
+            }
+
+            // Antislash
+        } else if (direction == 8 || direction == 4) {
+
+            // x et y de signes différents donc diagonale haut-gauche /
+            // bas-droit
+            if (x - y != 0) {
+                c = compteAntiSlash(a[0].getI(), a[0].getJ());
+
+                if (c != Math.abs(y) || c != Math.abs(x)) {
+                    return false;
+                } else {
+
+                    if (direction == 4) {
+                        for (int f = a[0].getI(); f < a[1].getI(); f++) {
+                            for (int g = a[0].getJ(); g > a[1].getJ(); g--) {
+                                if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g]!= 0) {
+                                    return false;
+                                }
+                                /*if(tab[f][g] == tab[a[0].getI()][a[0].getJ()] && a[0].getI()!=f && a[0].getJ()!=g
+                                		&& tab[f-1][g+1]!= 0){
+                                	return false;
+                                }*/
+                            }
+                        }
+                        return true;
+                    } else {
+                        for (int f = a[0].getI(); f > a[1].getI(); f--) {
+                            for (int g = a[0].getJ(); g < a[1].getJ(); g++) {
+                                if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g]!= 0) {
+                                    return false;
+                                }
+                                /*if(tab[f][g] == tab[a[0].getI()][a[0].getJ()] && a[0].getI()!=f && a[0].getJ()!=g
+                                		&& tab[f+1][g-1]!= 0){
+                                	return false;
+                                }*/
+                            }
+                        }
+                        return true;
+                    }
+                }
+
+            }
+        } else if (direction == 2 || direction == 6) {
+            // slash
+            c = compteSlash(a[0].getI(), a[0].getJ());
+	        if (c != Math.abs(x) || c != Math.abs(y)) {
+	            return false;
+	        } else {
+	
+	            if (direction == 2) {
+	                for (int f = a[0].getI(); f < a[1].getI(); f++) {
+	                    for (int g = a[0].getJ(); g < a[1].getJ(); g++) {
+	                        if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g]!= 0) {
+	                        	
+	                            return false;
+	                        }
+	                        /*if(tab[f][g] == tab[a[0].getI()][a[0].getJ()] && a[0].getI()!=f && a[0].getJ()!=g
+	                        		&& tab[f-1][g-1]!= 0){
+	                        	return false;
+	                        }*/
+	                    }
+	                }
+	                return true;
+	            } else {
+	                for (int f = a[0].getI(); f > a[1].getI(); f--) {
+	                    for (int g = a[0].getJ(); g > a[1].getJ(); g--) {
+	                        if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g]!= 0) {
+	                            return false;
+	                        }
+	                        /*if(tab[f][g] == tab[a[0].getI()][a[0].getJ()] && a[0].getI()!=f && a[0].getJ()!=g
+	                        		&& tab[f+1][g+1]!= 0){
+	                        	return false;
+	                        }*/
+	                    }
+	                }
+	                return true;
+	            }
+	        }
+        }
         return false;
     }
 
+    private int direction(Couple d, Couple a) {
+
+        int x = a.getI() - d.getI();
+        int y = a.getJ() - d.getJ();
+
+        if (x == 0 && y == 0) {
+            return 0;
+        }
+
+        if (x == 0) {
+            if (y > 0) {
+                return 1;
+            } else {
+                return 5;
+            }
+        } else if (x > 0) {
+            if (y > 0) {
+                return 2;
+            } else if (y == 0) {
+                return 3;
+            } else {
+                return 4;
+            }
+        } else {
+            if (y < 0) {
+                return 6;
+            } else if (y == 0) {
+                return 7;
+            } else {
+                return 8;
+            }
+        }
+
+    }
+
+    private int compteHorizonztale(int j) {
+        int c = 0;
+        for (int i = 0; i < DIMENSION; i++) {
+            if (tab[i][j] != 0) {
+                c++;
+            }
+        }
+        return c;
+
+    }
+
+    private int compteVerticale(int i) {
+        int c = 0;
+        for (int j = 0; j < DIMENSION; j++) {
+            if (tab[i][j] != 0) {
+                c++;
+            }
+        }
+        return c;
+
+    }
+    // TODO tazzzz : Vérifier les bornes des whiles
+    private int compteSlash(int i, int j) {
+        int a = i-1;
+        int b = j-1;
+
+        int c = 1;
+        while (a >= 0 && b >= 0) {
+            if (tab[a][b] != 0) {
+                c++;
+            }
+            a--;
+            b--;
+            
+        }
+
+        b = j+1;
+        a = i+1;
+        while (a < DIMENSION && b < DIMENSION) {
+            if (tab[a][b] != 0) {
+                c++;
+            }
+            a++;
+            b++;
+        }
+
+        return c;
+
+    }
+    // TODO tazzzz : Vérifier les bornes des whiles
+    private int compteAntiSlash(int i, int j) {
+
+        int a = i;
+        int b = j;
+
+        int c = 0;
+
+        while (a >= 0 && b < DIMENSION) {
+            if (tab[a][b] != 0) {
+                c++;
+            }
+            a--;
+            b++;
+        }
+        b = j-1;
+        a = i+1;
+        while (a < DIMENSION && b >= 0) {
+            if (tab[a][b] != 0) {
+                c++;
+            }
+            a++;
+            b--;
+        }
+
+        return c;
+
+    }
+
+    private Couple[] trad(String place) {
+
+        Couple[] c = new Couple[2];
+
+        c[0] = new Couple(tradChar(place.charAt(0)), Character.getNumericValue(place.charAt(1))-1);
+        c[1] = new Couple(tradChar(place.charAt(3)), Character.getNumericValue(place.charAt(4))-1);
+        return c;
+    }
+
+    private int tradChar(char c) {
+        int i = 0;
+        switch (c) {
+        case 'A':
+            i = 0;
+            break;
+        case 'B':
+            i = 1;
+            break;
+        case 'C':
+            i = 2;
+            break;
+        case 'D':
+            i = 3;
+            break;
+        case 'E':
+            i = 4;
+            break;
+        case 'F':
+            i = 5;
+            break;
+        case 'G':
+            i = 6;
+            break;
+        case 'H':
+            i = 7;
+            break;
+        case 'Z':
+        	i = -1;
+        	break;
+        default :
+        	i = -2;
+        }
+        return i;
+    }
+    
     @Override
     public boolean finDePartie() {
     	int i,j,ok;
@@ -83,7 +406,7 @@ public class Plateau implements Partie1 {
      * @param j colonne du 1er pion
      * @return retourne un booleen qui indique s'il y a un chemin qui parcours tout les pions restant du joueur
      */
-    private boolean parcoursChemin(int i, int j) {
+    public boolean parcoursChemin(int i, int j) {
     	ArrayList<Couple> visites = new ArrayList<Couple>();
     	parcoursProfondeur(i,j,visites);
     	if(this.tab[i][j]==NOIR && visites.size() == this.nbPionNoir){
@@ -117,7 +440,7 @@ public class Plateau implements Partie1 {
     }
     /**
      * Cette fonction permet d'obtenir une liste des pions adjacents à celui se trouvant 
-     * en (i,j) et de la même couleur que celui-ci
+     * en (i,j) et de la même couleur que celui-ci.
      * @param i ligne
      * @param j colonne
      * @return une liste des pions voisins du même joueur
@@ -183,10 +506,19 @@ public class Plateau implements Partie1 {
     	return res;
     }
     
-	@Override
+    /* (non-Javadoc)
+     * @see moteur.Partie1#play(java.lang.String, java.lang.String)
+     */
+    @Override
     public void play(String move, String player) {
-        // TODO Syprien : Auto-generated method stub
-
+        // TODO Syprien : Jouer le coup
+        //if (estValide(move, player) || player == "noir") {
+            Couple[] c = trad(move);
+            /*System.out.println(c[0].getI()+"  !!!!   "+c[0].getJ());
+            System.out.println(c[1].getI()+"  !!!!   "+c[1].getJ());*/
+            tab[c[1].getI()][c[1].getJ()] = tab[c[0].getI()][c[0].getJ()];
+            tab[c[0].getI()][c[0].getJ()] = 0;
+        //}
     }
 
     @Override
@@ -258,7 +590,7 @@ public class Plateau implements Partie1 {
 		} catch (FileNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-			System.out.println("Le fichier spécifier n'a pas été trouvé.")
+			System.out.println("Le fichier spécifier n'a pas été trouvé.");
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -284,8 +616,8 @@ public class Plateau implements Partie1 {
     public String toString() {
     	String ligne="";
     	char c;
-    	for(int i = 0 ;i<DIMENSION; i++) {
-			for(int j = 0 ;j<DIMENSION; j++) {
+    	for(int j = DIMENSION-1 ;j>=0; j--) {	
+    		for(int i = 0 ;i<DIMENSION; i++) {
 				if(this.tab[i][j] == NOIR)
 					c = PION_NOIR;
 				else if (this.tab[i][j] == BLANC)
@@ -298,39 +630,124 @@ public class Plateau implements Partie1 {
     	}
     	return ligne;
     }
+    
+    public ArrayList<String> coupsPossibles (String cJoueur) {
+    	ArrayList<String> resultat = new ArrayList<String>();
+    	int i = 0 , j,nbPion,verticale,horizontal,slash,antislash;
+    	byte couleurId;
+    	if(cJoueur=="noir") { 
+    		nbPion = this.nbPionNoir;
+    		couleurId = this.NOIR;
+    	} else {
+    		nbPion = this.nbPionBlanc;
+    		couleurId = this.BLANC;
+    	}
+    	while(i<this.DIMENSION && nbPion > 0) {
+    		j=0;
+    		while(j<this.DIMENSION && nbPion > 0) {
+    			if(this.tab[i][j] == couleurId) {
+    				verticale=this.compteVerticale(i);
+    				horizontal=this.compteHorizonztale(j);
+    				slash=this.compteSlash(i, j);
+    				antislash=this.compteAntiSlash(i, j);
+    				Couple origine = new Couple(i,j);
+    				Couple destination = null;
+    				Couple [] tabCoup = new Couple [8];
+    				if (j+verticale < DIMENSION)
+    					tabCoup[0] = new Couple (i,j+verticale);
+    				else 
+    					tabCoup[0] = null;
+    				if (j-verticale < DIMENSION)
+    					tabCoup[1] = new Couple (i,j-verticale);
+    				else
+    					tabCoup[1] = null;
+    				if(i+horizontal < DIMENSION)
+    					tabCoup[2] = new Couple (i+horizontal,j);
+    				else
+    					tabCoup[2] = null;
+    				if (i-horizontal < DIMENSION) 
+    					tabCoup[3] = new Couple (i-horizontal,j);
+    				else
+    					tabCoup[3] = null;
+    				if(i-antislash< DIMENSION && j+antislash < DIMENSION)
+    					tabCoup[4] = new Couple (i-antislash,j+antislash);
+    				else
+    					tabCoup[4] = null;
+    				if(i+antislash < DIMENSION && j-antislash < DIMENSION)
+    					tabCoup[5] = new Couple (i+antislash,j-antislash);
+    				else
+    					tabCoup[5] = null;
+    				if(i+slash < DIMENSION && j+slash < DIMENSION)
+    					tabCoup[6] = new Couple (i+slash,j+slash);
+    				else
+    					tabCoup[6] = null;
+    				if(i-slash < DIMENSION && j-slash < DIMENSION)
+    					tabCoup[7] = new Couple (i-slash,j-slash);
+    				else
+    					tabCoup[7] = null;
+    				for(int v = 0;v<=7;v++) {
+    					if(tabCoup[v] != null) {
+		    				destination = tabCoup[v];
+		    				String toto = origine.toString()+"-"+destination.toString();
+	    					if(this.estValide(origine.toString()+"-"+destination.toString(), cJoueur)){
+		    					resultat.add(origine.toString()+"-"+destination.toString());
+		    				}
+    					}
+    				}
+    				nbPion --;
+    			}
+    			j++;
+    		}
+    		i++;
+    	}
+    	//System.out.println(resultat);
+    	return resultat;
+    }
+    
+    public Plateau copy(){
+    	Plateau p = new Plateau();
+    	for(int i=0;i<this.DIMENSION;i++)
+    		for(int j = 0 ; j<this.DIMENSION;j++){
+    			p.tab[i][j]=this.tab[i][j];
+    		}
+    	p.nbPionBlanc=this.nbPionBlanc;
+    	p.nbPionNoir=this.nbPionNoir;
+    	return p;
+    }
     public static void main(String args[]) {
     	Plateau p = new Plateau();
     	/* test de la sauvegarde d'un plateau , pour vérifier le résultat il faut 
     	 * ouvrir le fichier test.txt à la racine du workspace.
     	 */
-    	p.saveToFile("test.txt");
+    	//p.saveToFile("test.txt");
     	
     	/* test du chargement d'un plateau.
     	 * Pour vérifier facilement le chargement il est préférable de modifier le fichier test.txt "à la main".
     	 */
-    	p.setFromFile("test.txt");
+    	//p.setFromFile("test.txt");
     	
     	/* test de la fonction de fin de partie. Afin de faciliter le test il est recommander de modifier le fichier
     	 * directement pour obtenir une fin de partie.
     	 */
-    	System.out.println(p.finDePartie());
+    	System.out.println("La partie est elle terminé ? "+p.finDePartie());
     	
-    	System.out.println(p);
+    	//System.out.println(p);
     	/* cas normal un coup valide */
-    	System.out.println("Le coup doit être valide : "+p.estValide("B1-D3", "blanc"));
+    	//System.out.println("Le coup doit être valide : "+p.estValide("B1-D3", "blanc"));
     	/* erreur sur la couleur du pion sur la case d'origine du déplacement */
-    	System.out.println("Le coup doit être invalide car le pion n'est pas de la bonne couleur : "+
-    			p.estValide("A2-C4", "blanc"));
+    	//System.out.println("Le coup doit être invalide car le pion n'est pas de la bonne couleur : "+
+    	//		p.estValide("A2-C4", "blanc"));
     	/* nombre de cases trop important */
-    	System.out.println("Le coup doit être invalide car le déplacement n'est pas possible : "+
-    			p.estValide("A2-D5", "noir"));
+    	//System.out.println("Le coup doit être invalide car le déplacement n'est pas possible : "+
+    	//		p.estValide("A2-D5", "noir"));
     	/* position non atteingnable par le pion */
-    	System.out.println("Le coup doit être invalide car la position ne peut être atteinte par le pion : "+
-    			p.estValide("A2-B4", "blanc"));
+    	//System.out.println("Le coup doit être invalide car la position ne peut être atteinte par le pion : "+
+    	//		p.estValide("A2-B4", "blanc"));
     	/* test de la fonction de deplacement d'un pion */
-    	System.out.println(p);
-    	p.play("B1-D3","blanc");
-    	System.out.println(p);
+    	//System.out.println(p);
+    	//p.play("B1-D3","blanc");
+    	//System.out.println(p);
+    	//p.coupsPossibles("noir");
     	
     }
 }

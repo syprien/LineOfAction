@@ -15,9 +15,15 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.StringTokenizer;
 
-//import model.Etat;
+/**
+ * Cette classe regroupe tout les fonctions ainsi que la structure de donnée nécessaire au fonctionnement
+ * d'une partie de Line Of Action
+ * 
+ * @author tazzzz-syprien
+ *
+ */
 
-public class Plateau implements Partie1/*,Etat*/ {
+public class Plateau implements Partie1 {
 	
     static final private byte NOIR = 1;
     static final private byte BLANC = -1;
@@ -329,7 +335,13 @@ public class Plateau implements Partie1/*,Etat*/ {
         return c;
 
     }
-
+    
+    /**
+     * Traduit un mouvement envoye par le serveur en deux objets de type Couple facilement
+     * exploitable par le programme
+     * @param place le mouvement envoyé par le serveur
+     * @return une tableau de deux Couples
+     */
     private Couple[] trad(String place) {
 
         Couple[] c = new Couple[2];
@@ -339,6 +351,11 @@ public class Plateau implements Partie1/*,Etat*/ {
         return c;
     }
 
+    /**
+     * traduit le caractère donne pour un mouvement en entier pour le situé dans le plateau
+     * @param c le caratère
+     * @return la traduction en entier du caractère pour le plateau
+     */
     private int tradChar(char c) {
         int i = 0;
         switch (c) {
@@ -511,14 +528,10 @@ public class Plateau implements Partie1/*,Etat*/ {
      */
     @Override
     public void play(String move, String player) {
-        // TODO Syprien : Jouer le coup
-        //if (estValide(move, player) || player == "noir") {
             Couple[] c = trad(move);
-            /*System.out.println(c[0].getI()+"  !!!!   "+c[0].getJ());
-            System.out.println(c[1].getI()+"  !!!!   "+c[1].getJ());*/
             tab[c[1].getI()][c[1].getJ()] = tab[c[0].getI()][c[0].getJ()];
             tab[c[0].getI()][c[0].getJ()] = 0;
-        //}
+            this.updateNbPion();
     }
 
     @Override
@@ -631,11 +644,18 @@ public class Plateau implements Partie1/*,Etat*/ {
     	return ligne;
     }
     
+    
+    /**
+     * Dresse la liste des coups possible pour un joueur donnée
+     * @param cJoueur la couleur permettant d'identifier le joueur
+     * @return un objet de type ArrayList<String> contenant l'ensemble de coup possible pour le joueur cJoueur
+     * à un instant donné
+     */
     public ArrayList<String> coupsPossibles (String cJoueur) {
     	ArrayList<String> resultat = new ArrayList<String>();
     	int i = 0 , j,nbPion,verticale,horizontal,slash,antislash;
     	byte couleurId;
-    	if(cJoueur=="noir") { 
+    	if(cJoueur.compareToIgnoreCase("noir") == 0) { 
     		nbPion = this.nbPionNoir;
     		couleurId = this.NOIR;
     	} else {
@@ -700,10 +720,29 @@ public class Plateau implements Partie1/*,Etat*/ {
     		}
     		i++;
     	}
-    	//System.out.println(resultat);
     	return resultat;
     }
     
+    /**
+     * fonction de mise à jour du nombre de pion présent sur le plateau de jeu
+     */
+    private void updateNbPion() {
+    	int noir = 0 , blanc = 0;
+    	for(int i = 0 ;i<DIMENSION; i++)	
+    		for(int j = 0 ;j<DIMENSION; j++) {
+    			if(this.getTab()[i][j] == BLANC)
+    				blanc++;
+    			else if (this.getTab()[i][j] == NOIR)
+    				noir++;
+    		}
+    	this.nbPionBlanc = blanc;
+    	this.nbPionNoir = noir;
+    }
+    
+    /**
+     * realise un copie du plateau de jeu (duplique)
+     * @return la copie du plateau de jeu
+     */
     public Plateau copy(){
     	Plateau p = new Plateau();
     	for(int i=0;i<this.DIMENSION;i++)
@@ -714,40 +753,5 @@ public class Plateau implements Partie1/*,Etat*/ {
     	p.nbPionNoir=this.nbPionNoir;
     	return p;
     }
-    public static void main(String args[]) {
-    	Plateau p = new Plateau();
-    	/* test de la sauvegarde d'un plateau , pour vérifier le résultat il faut 
-    	 * ouvrir le fichier test.txt à la racine du workspace.
-    	 */
-    	//p.saveToFile("test.txt");
-    	
-    	/* test du chargement d'un plateau.
-    	 * Pour vérifier facilement le chargement il est préférable de modifier le fichier test.txt "à la main".
-    	 */
-    	//p.setFromFile("test.txt");
-    	
-    	/* test de la fonction de fin de partie. Afin de faciliter le test il est recommander de modifier le fichier
-    	 * directement pour obtenir une fin de partie.
-    	 */
-    	System.out.println("La partie est elle terminé ? "+p.finDePartie());
-    	
-    	//System.out.println(p);
-    	/* cas normal un coup valide */
-    	//System.out.println("Le coup doit être valide : "+p.estValide("B1-D3", "blanc"));
-    	/* erreur sur la couleur du pion sur la case d'origine du déplacement */
-    	//System.out.println("Le coup doit être invalide car le pion n'est pas de la bonne couleur : "+
-    	//		p.estValide("A2-C4", "blanc"));
-    	/* nombre de cases trop important */
-    	//System.out.println("Le coup doit être invalide car le déplacement n'est pas possible : "+
-    	//		p.estValide("A2-D5", "noir"));
-    	/* position non atteingnable par le pion */
-    	//System.out.println("Le coup doit être invalide car la position ne peut être atteinte par le pion : "+
-    	//		p.estValide("A2-B4", "blanc"));
-    	/* test de la fonction de deplacement d'un pion */
-    	//System.out.println(p);
-    	//p.play("B1-D3","blanc");
-    	//System.out.println(p);
-    	//p.coupsPossibles("noir");
-    	
-    }
+    
 }

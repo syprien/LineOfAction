@@ -59,13 +59,20 @@ public class HeuristiqueLoa{
 			// (Sans effet en 2008, car la recherche n'alternait jamais les joueurs.)
 			switch (niveau) {
 				case 4 :
-					// CORRECTIF (2026) : nb_voisin() peut renvoyer 0 (aucun voisin) -> division par zéro.
-					// Cette ArithmeticException était avalée en silence par NegaScout (score 0).
+					// CORRECTIF (2026) : le rapport décrit DEUX critères mineurs, ajoutés aux autres :
+					//  - « nombre de pion » : « il serait mal avisé d'en capturer un trop grand nombre. On
+					//    compte ici la différence de nombre entre les pions amis et ennemi » ;
+					//  - « nombre moyen de voisins » : « une fonction mineure mais elle renforce la
+					//    concentration ».
+					// Le code calculait (ennemis² - amis) / (voisins moyens) : le carré (environ 132 au
+					// départ) et la division en faisaient un terme dix fois plus lourd que tous les autres
+					// réunis, qui décidait presque seul (et divisait par zéro sans voisin). Les deux critères
+					// sont maintenant de simples différences, comme le prévoit le rapport.
 					res = (ligne_max(p,this.ami) - ligne_max(p,this.enemi))
 					- evaluation(p,this.ami) + evaluation(p,this.enemi)
 					+ centre(p,this.ami) - centre(p,this.enemi)
-					+ (nbPion(p,this.ami) / Math.max(1, this.nb_voisin(p,this.ami)))
-					- (nbPion(p,this.enemi) / Math.max(1, this.nb_voisin(p,this.enemi)));
+					+ nbPion(p,this.ami)   // déjà à somme nulle : nbPion(p, enemi) == -nbPion(p, ami)
+					+ nb_voisin(p,this.ami) - nb_voisin(p,this.enemi);
 					// CORRECTIF (2026) : "break" manquant. Sans lui, l'exécution « tombe » dans le
 					// case 3, qui ÉCRASE res : le niveau 4 était en fait identique au niveau 3.
 					break;
@@ -371,7 +378,8 @@ public class HeuristiqueLoa{
 	    			   	enemie++;
 	    		   }
 	    	   
-	    	   return ((enemie*enemie) - amis);
+	    	   // CORRECTIF (2026) : la différence prévue par le rapport, sans le carré (voir eval(), niveau 4).
+	    	   return enemie - amis;
 	    	   
 	       }
 	       

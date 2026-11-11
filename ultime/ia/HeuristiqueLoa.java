@@ -42,14 +42,16 @@ public class HeuristiqueLoa {
     public int eval(Plateau p, byte ami, int niveau) {
         byte enemi = (byte) -ami;
         long a = p.pions(ami), e = p.pions(enemi);
-        int res = ligne_max(a) - ligne_max(e);
-        if (niveau == 1) return res;
-        res += -evaluation(a) + evaluation(e);
-        if (niveau == 2) return res;
-        res += centre(a) - centre(e);
-        if (niveau != 4) return res;
-        // CORRECTIF (2026) : Math.max(1, ...) évite la division par zéro de 2008.
-        return res + nbPion(a, e) / Math.max(1, nb_voisin(a)) - nbPion(e, a) / Math.max(1, nb_voisin(e));
+        int chaine = ligne_max(a) - ligne_max(e);
+        if (niveau == 1) return chaine;
+        int concentration = -evaluation(a) + evaluation(e);
+        if (niveau == 2) return chaine + concentration;
+        int centre = centre(a) - centre(e);
+        if (niveau != 4) return chaine + concentration + centre;
+        // CORRECTIF (2026) : deux critères mineurs, comme le prévoit le rapport, au lieu de
+        // (ennemis² - amis) / voisins (voir ia/HeuristiqueLoa.java).
+        int pions = nbPion(a, e), voisins = nb_voisin(a) - nb_voisin(e);
+        return chaine + concentration + centre + pions + voisins;
     }
 
     /** Version chaînes, pour les tests : joueur vaut "noir" ou "blanc". */
@@ -106,10 +108,9 @@ public class HeuristiqueLoa {
         return n == 0 ? 0 : res / n;
     }
 
-    /** (pions ennemis)² - pions amis. */
+    /** Pions ennemis - pions amis (« il serait mal avisé d'en capturer un trop grand nombre »). */
     private static int nbPion(long amis, long ennemis) {
-        int e = Long.bitCount(ennemis);
-        return e * e - Long.bitCount(amis);
+        return Long.bitCount(ennemis) - Long.bitCount(amis);
     }
 
     /** Nombre moyen de voisins de la même couleur, par pion. */

@@ -148,3 +148,33 @@ plus.
 La vitesse suffit à écraser l'ancien Ultime, mais pas à battre Rival : à recherche comparable, c'est maintenant
 l'évaluation qui fait la différence. Prochaine étape : ajuster les poids des critères en faisant s'affronter des
 variantes, comme le proposait la conclusion du rapport de 2008.
+
+## Le terme « pions / voisins » : le code contre le rapport
+
+En mesurant le poids de chaque critère de l'évaluation, une surprise : le dernier terme,
+`(ennemis² − amis) / (nombre moyen de voisins)`, pesait en moyenne **dix fois plus** que la chaîne la plus longue,
+la concentration et la centralisation réunies. Il décidait presque seul.
+
+Le rapport de 2008 décrit pourtant deux critères **mineurs**, simplement ajoutés aux autres :
+
+- « Nombre de pion » : « il serait mal avisé d'en capturer un trop grand nombre. On compte ici la différence de
+  nombre entre les pions amis et ennemi » ;
+- « Nombre moyen de voisins » : « C'est une fonction mineure mais elle renforce la concentration ».
+
+Le code, lui, élevait le nombre de pions ennemis au carré (environ 132 au départ) et divisait le tout par le nombre
+moyen de voisins. Le rapport raconte que ce terme « grève les performances » mais permettait de gagner contre la
+version qui ne l'avait pas. C'était sur le moteur de 2008, où la recherche n'alternait pas les joueurs et où un
+simple `else` comptait les cases vides comme des pions ennemis : il mesurait alors tout autre chose.
+
+Le code est considéré comme un bug et corrigé pour faire ce que prévoit le rapport, dans la version corrigée
+(`ia/HeuristiqueLoa.java`) comme dans Ultime : `ennemis − amis`, plus `mes voisins moyens − les siens`.
+
+| Match (2 min par joueur) | Avant | Après |
+|---|---|---|
+| Ultime rapide contre Rival | 1 – 5 | **6 – 0** |
+| version corrigée contre Rival | 1 – 1 | 2 – 2 |
+| version corrigée contre version de 2008 | 4 – 0 | **2 – 0** |
+
+Les deux IA étant déterministes, les trois parties où Ultime a les noirs sont la même partie rejouée ; celles où il a
+les blancs varient avec les temps de réflexion. Avec l'évaluation que décrivait le rapport de 2008, l'algo
+ultime bat Rival.

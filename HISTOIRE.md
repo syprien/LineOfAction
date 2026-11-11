@@ -206,3 +206,32 @@ range dans un fichier par partie avec `--logs <dossier>` :
 ```
 coup H5-F3 profondeur 7 noeuds 9008640 score 15 temps 4799 ms livre non
 ```
+
+## L'algo ultime en Rust
+
+L'étape `v2026-ultime-rust` porte Ultime en Rust (dossier `ultime-rs/`) pour comparer les deux langages à algorithme
+égal : même plateau en bitboards, même évaluation, mêmes poids, même NegaScout, sur un seul cœur. Le générateur
+`java.util.Random` est reproduit à l'identique, ce qui donne les mêmes empreintes de Zobrist ; la bibliothèque
+d'ouvertures n'est pas recopiée, le fichier Java est relu à la compilation.
+
+Le portage est vérifié contre Java : `tests/ExportUltime.java` exporte 19 759 positions avec leur empreinte, leurs
+évaluations et leurs coups possibles, et 791 recherches à profondeur 4 ; `ultime verifier` retrouve tout à
+l'identique, jusqu'au nombre exact de positions explorées par chaque recherche.
+
+| Mesure | Java | Rust |
+|---|---|---|
+| recherche à profondeur 6 sur 8 positions (`BenchUltime`, `ultime bench 6`) | 685 ms | **532 ms** |
+| positions étudiées par seconde en partie (trace) | 2,69 millions | **3,47 millions** |
+| profondeur moyenne atteinte en partie | 7,22 | 7,21 |
+| pic de mémoire physique | 56,6 Mo | **12,9 Mo** |
+| mémoire réservée | 638,5 Mo | **7,2 Mo** |
+
+| Match (2 min par joueur) | Résultat |
+|---|---|
+| Ultime en Rust contre Ultime en Java | **5 – 1** |
+
+Rust va environ 1,3 fois plus vite et consomme une fraction de la mémoire : il se contente de sa table de
+transposition (6 Mo), là où la machine virtuelle Java se réserve d'office un grand tas. Mais le compilateur JIT de
+Java est excellent sur ce genre de code (des entiers et des tableaux, aucun objet), et 30 % de positions en plus ne
+suffisent pas à voir un coup plus loin : la profondeur atteinte est la même. Sur 6 parties, le 5 – 1 n'est pas
+une preuve ; le plus gros gain reste celui du changement d'algorithme du plateau (×19,5), sur la même machine.

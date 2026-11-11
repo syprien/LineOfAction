@@ -29,6 +29,7 @@ Les étapes de 2008 antérieures au rendu ne contiennent que les fichiers envoy�
 | `v2026-ultime` | 2026 | l'algo ultime : l'évaluation de 2008 avec une recherche moderne et une bibliothèque d'ouvertures |
 | `v2026-ultime-rapide` | 2026 | l'algo ultime avec un plateau rapide : bitboards, coups en entiers, jouer puis annuler |
 | `v2026-ultime-poids` | 2026 | les poids des critères ajustés par sélection naturelle, comme le proposait le rapport |
+| `v2026-ultime-rust` | 2026 | l'algo ultime porté en Rust, pour comparer les deux langages |
 
 Pour voir toutes les corrections, avec leurs explications :
 
@@ -61,6 +62,16 @@ java -jar Arbitre.jar --j1 TazzzzSyprien.jar --j2 TazzzzSyprien_v2008-rendu.jar 
 On peut aussi faire comme en 2008 : `java -jar Arbitre.jar --port 1234`, puis lancer chaque joueur à la main
 avec `java -jar TazzzzSyprien.jar localhost 1234 TazzzzSyprien`.
 
+La version Rust d'Ultime se construit avec Cargo (Rust est aussi dans `mise.toml`). L'arbitre accepte un exécutable
+à la place d'un `.jar` :
+
+```bash
+cd ultime-rs && cargo build --release && cd ..
+cp ultime-rs/target/release/ultime.exe build/tournoi/UltimeRust.exe   # « ultime » sans .exe hors Windows
+cd build/tournoi
+java -jar Arbitre.jar --j1 UltimeRust.exe --j2 Ultime.jar --parties 6 --temps 120000 --logs traces
+```
+
 ## Organisation du code
 
 | Dossier | Rôle |
@@ -73,6 +84,7 @@ avec `java -jar TazzzzSyprien.jar localhost 1234 TazzzzSyprien`.
 | `arbitre/` | l'arbitre du tournoi (2026) |
 | `rival/` | l'IA rivale écrite par Claude Haiku (2026) |
 | `ultime/` | l'algo ultime (2026) : produit `Ultime.jar` |
+| `ultime-rs/` | l'algo ultime en Rust (2026) : produit `ultime.exe` |
 | `tests/` | auto-parties, mesures de temps, vérification croisée des règles (2026) |
 | `rapports/` | les rapports de 2008, transcrits en Markdown |
 

@@ -76,7 +76,8 @@ public class Arbitre {
                 "  --temps <ms>      temps total par joueur et par partie (defaut 300000 = 5 min)",
                 "  --parties <n>     nombre de parties (defaut 1)",
                 "  --max-coups <n>   partie nulle apres n coups (defaut 300)",
-                "  --j1 <jar> --j2 <jar>  lance les deux joueurs automatiquement",
+                "  --j1 <jar> --j2 <jar>  lance les deux joueurs automatiquement (un .jar, ou un",
+                "                         executable comme ultime-rs/target/release/ultime.exe)",
                 "                         (couleurs alternees a chaque partie)",
                 "  --logs <dossier>  sortie console des joueurs (sinon ignoree)",
                 "  --plateau         affiche le plateau apres chaque coup"));
@@ -349,12 +350,16 @@ public class Arbitre {
 
     static String nomJar(String jar) {
         String n = new File(jar).getName();
-        return n.toLowerCase(Locale.ROOT).endsWith(".jar") ? n.substring(0, n.length() - 4) : n;
+        String m = n.toLowerCase(Locale.ROOT);
+        return m.endsWith(".jar") || m.endsWith(".exe") ? n.substring(0, n.length() - 4) : n;
     }
 
     Process lancerJar(String jar, String id, int partie) throws IOException {
         String java = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
-        ProcessBuilder pb = new ProcessBuilder(java, "-jar", jar, "localhost", String.valueOf(port), id);
+        // Un .jar est lancé par Java ; tout autre fichier (la version Rust d'Ultime) est lancé directement.
+        ProcessBuilder pb = jar.toLowerCase(Locale.ROOT).endsWith(".jar")
+                ? new ProcessBuilder(java, "-jar", jar, "localhost", String.valueOf(port), id)
+                : new ProcessBuilder(new File(jar).getAbsolutePath(), "localhost", String.valueOf(port), id);
         pb.redirectErrorStream(true);
         if (logs != null) {
             logs.mkdirs();

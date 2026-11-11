@@ -1,0 +1,5 @@
+# Compile pour le processeur de la machine : sans cela, Rust vise un x86-64 de 2003, sans l'instruction
+# POPCNT, et count_ones() (l'équivalent de Long.bitCount) serait calculé en logiciel. Le JIT de Java,
+# lui, compile toujours pour le processeur sur lequel il tourne : c'est la comparaison équitable.
+[build]
+rustflags = ["-C", "target-cpu=native"]

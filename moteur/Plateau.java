@@ -388,18 +388,23 @@ public class Plateau implements Partie1 {
     
     @Override
     public boolean finDePartie() {
-    	int i,j,ok;
+    	int i,j;
     	boolean finNoir=false,
     			finBlanc=false;
-    	i=j=ok=0;
-    	while (ok<2 && (i<DIMENSION && j <DIMENSION) && !finNoir && !finBlanc){
-    		if(this.tab[i][j] == NOIR){
+    	// CORRECTIF (2026) : le compteur « ok » s'arrêtait après les DEUX premiers pions rencontrés, même
+    	// s'ils étaient de la même couleur. Sur le plateau de départ, ce sont A2 et A3, deux pions blancs :
+    	// seule la victoire de Blanc était détectée, celle de Noir jamais tant que la colonne A gardait au
+    	// moins deux pions blancs. On retient plutôt si chaque couleur a déjà été testée.
+    	boolean noirTeste=false, blancTeste=false;
+    	i=j=0;
+    	while (!(noirTeste && blancTeste) && (i<DIMENSION && j <DIMENSION) && !finNoir && !finBlanc){
+    		if(this.tab[i][j] == NOIR && !noirTeste){
     			finNoir = parcoursChemin(i,j);
-    			ok++;
+    			noirTeste = true;
     		}
-    		if(this.tab[i][j] == BLANC){
+    		if(this.tab[i][j] == BLANC && !blancTeste){
     			finBlanc = parcoursChemin(i,j);
-    			ok++;
+    			blancTeste = true;
     		}
     		if(j==7){
     			i++;

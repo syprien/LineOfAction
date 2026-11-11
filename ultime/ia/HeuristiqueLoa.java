@@ -51,7 +51,23 @@ public class HeuristiqueLoa {
         // CORRECTIF (2026) : deux critères mineurs, comme le prévoit le rapport, au lieu de
         // (ennemis² - amis) / voisins (voir ia/HeuristiqueLoa.java).
         int pions = nbPion(a, e), voisins = nb_voisin(a) - nb_voisin(e);
-        return chaine + concentration + centre + pions + voisins;
+        if (poids == null) return chaine + concentration + centre + pions + voisins;
+        return poids[0] * chaine + poids[1] * concentration + poids[2] * centre + poids[3] * pions + poids[4] * voisins;
+    }
+
+    // ULTIME (2026), étape « poids » : un coefficient devant chaque critère du niveau 4 (chaîne,
+    // concentration, centre, pions, voisins). Sans poids, c'est la somme de 2008.
+    // POIDS : les poids choisis par sélection naturelle (tests/Selection.java), partis de
+    // 10,10,10,1,1 : la chaîne la plus longue compte plus, la centralisation moins.
+    public static final int[] POIDS = {13, 10, 6, 1, 1};
+    private final int[] poids;
+
+    public HeuristiqueLoa() {
+        this.poids = null;
+    }
+
+    public HeuristiqueLoa(int... poids) {
+        this.poids = poids.clone();
     }
 
     /** Version chaînes, pour les tests : joueur vaut "noir" ou "blanc". */

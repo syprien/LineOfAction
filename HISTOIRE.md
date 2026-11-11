@@ -178,3 +178,31 @@ Le code est considéré comme un bug et corrigé pour faire ce que prévoit le r
 Les deux IA étant déterministes, les trois parties où Ultime a les noirs sont la même partie rejouée ; celles où il a
 les blancs varient avec les temps de réflexion. Avec l'évaluation que décrivait le rapport de 2008, l'algo
 ultime bat Rival.
+
+## Les poids, par sélection naturelle
+
+La conclusion du rapport de 2008 proposait d'ajuster les critères de l'évaluation par « sélection naturelle ».
+L'étape `v2026-ultime-poids` le fait. Un coefficient est placé devant chacun des cinq critères (chaîne la plus
+longue, concentration, centre, pions, voisins), puis deux outils les font s'affronter :
+
+- `tests/Fitness.java` fait jouer des variantes contre un adversaire fixe (la somme de 2008 ou Rival), en mémoire,
+  sans réseau, à 40 ms par coup, sur des ouvertures aléatoires jouées dans les deux couleurs ;
+- `tests/Selection.java` fait évoluer un champion. À chaque génération, un mutant (un ou deux poids multipliés par un
+  facteur entre ½ et 2) l'affronte sur 64 parties ; s'il marque au moins 56 %, un match de confirmation est joué, et
+  il devient champion si son score cumulé dépasse 55 %.
+
+Partie de `10,10,10,1,1` (pions et voisins en critères mineurs, comme le dit le rapport), la sélection a trouvé
+`13,10,6,1,1` dès la première génération (63 % contre l'ancien champion), puis aucun des 29 mutants suivants n'a fait
+mieux. La chaîne la plus longue compte plus, la centralisation moins. La bibliothèque d'ouvertures a été recalculée
+avec ces poids : le premier coup de Noir passe de `B1-D3` à `B1-B3`.
+
+| Match (2 min par joueur) | Résultat |
+|---|---|
+| Ultime avec les poids `13,10,6,1,1` contre Rival | **6 – 0**, en 24 à 27 coups (23 à 56 avant) |
+
+Ultime écrit aussi une ligne de trace par coup (profondeur atteinte, positions étudiées, score, temps), que l'arbitre
+range dans un fichier par partie avec `--logs <dossier>` :
+
+```
+coup H5-F3 profondeur 7 noeuds 9008640 score 15 temps 4799 ms livre non
+```

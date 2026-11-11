@@ -20,10 +20,18 @@ public class JoueurReseauIALOA implements JoueurReseau {
     private boolean disqualification;
 
     public String choisirCoup() {
+        long debut = System.nanoTime(), noeuds = recherche.noeuds();
         String livre = Ouvertures.coup(p, id);
-        if (livre != null && p.coupsPossibles(id).contains(livre)) return livre;
+        if (livre != null && p.coupsPossibles(id).contains(livre)) {
+            System.out.println("coup " + livre + " livre oui");
+            return livre;
+        }
         long budget = Math.max(20, Math.min(temps / 25, temps - 500));
         String coup = recherche.meilleurCoup(p, id, budget);
+        // ULTIME (2026) : une ligne de trace par coup, au même format que la version Rust (ultime-rs).
+        System.out.println("coup " + coup + " profondeur " + recherche.profondeurAtteinte() + " noeuds "
+                + (recherche.noeuds() - noeuds) + " score " + recherche.score() + " temps "
+                + (System.nanoTime() - debut) / 1000000 + " ms livre non");
         return coup != null ? coup : "A1-A1";
     }
 

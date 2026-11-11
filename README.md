@@ -28,6 +28,7 @@ Les étapes de 2008 antérieures au rendu ne contiennent que les fichiers envoy�
 | `v2026-histoire` | 2026 | ce README et l'histoire du projet |
 | `v2026-ultime` | 2026 | l'algo ultime : l'évaluation de 2008 avec une recherche moderne et une bibliothèque d'ouvertures |
 | `v2026-ultime-rapide` | 2026 | l'algo ultime avec un plateau rapide : bitboards, coups en entiers, jouer puis annuler |
+| `v2026-ultime-poids` | 2026 | les poids des critères ajustés par sélection naturelle, comme le proposait le rapport |
 
 Pour voir toutes les corrections, avec leurs explications :
 

@@ -35,10 +35,18 @@ public class NegaScout {
     // Coups et notes de tri de chaque niveau de la recherche.
     private final int[][] coups = new int[PLIS][128], notes = new int[PLIS][128];
 
-    private final HeuristiqueLoa h = new HeuristiqueLoa();
+    private final HeuristiqueLoa h;
+
+    public NegaScout() {
+        this(new HeuristiqueLoa(HeuristiqueLoa.POIDS));
+    }
+
+    public NegaScout(HeuristiqueLoa h) {
+        this.h = h;
+    }
     private long finNs, noeuds;
     private boolean arret;
-    private int scoreRacine;
+    private int scoreRacine, profondeurAtteinte;
 
     /**
      * Cherche le meilleur coup pour joueur (« noir » ou « blanc ») en au plus budgetMs millisecondes.
@@ -46,16 +54,23 @@ public class NegaScout {
      * @return le coup, ou null si le joueur ne peut pas jouer
      */
     public String meilleurCoup(Plateau p, String joueur, long budgetMs) {
+        return meilleurCoup(p, joueur, budgetMs, 40);
+    }
+
+    /** Idem, sans dépasser la profondeur maxi (les tests l'utilisent pour une recherche déterministe). */
+    public String meilleurCoup(Plateau p, String joueur, long budgetMs, int maxi) {
         finNs = System.nanoTime() + budgetMs * 1000000L;
         arret = false;
+        profondeurAtteinte = 0;
         byte moi = Plateau.couleur(joueur);
         int n = p.coups(moi, coups[0]);
         if (n == 0) return null;
         int choix = coups[0][0];
-        for (int d = 1; d <= 40; d++) {
+        for (int d = 1; d <= maxi; d++) {
             int m = racine(p, moi, d, n);
             if (m == 0) break;                    // profondeur interrompue : on garde la précédente
             choix = m;
+            profondeurAtteinte = d;
             int[] c = coups[0];                   // le meilleur coup est exploré en premier ensuite
             int k = 0;
             while (c[k] != m) k++;
@@ -67,6 +82,15 @@ public class NegaScout {
     }
 
     /** Nombre de positions explorées depuis la création (pour les mesures). */
+    /** Profondeur de la dernière itération terminée, et son score (pour la trace des coups). */
+    public int profondeurAtteinte() {
+        return profondeurAtteinte;
+    }
+
+    public int score() {
+        return scoreRacine;
+    }
+
     public long noeuds() {
         return noeuds;
     }

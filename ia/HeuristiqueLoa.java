@@ -20,6 +20,8 @@ public class HeuristiqueLoa{
     static final private char PION_NOIR = 'X';
     static final private char PION_BLANC = 'O';
     static final private byte DIMENSION = 8;
+    // CORRECTIF (2026) : score d'une position gagnée. C'était Integer.MAX_VALUE, voir ligne_max().
+    static final public int VICTOIRE = 10000;
     private byte ami;
     private byte enemi;
     
@@ -37,22 +39,40 @@ public class HeuristiqueLoa{
     	 */
 		public int eval(Plateau p,String joueur,int niveau) {
 			int res = 0,i=0,j=0;
-			if(joueur == "BLANC") {
+			// CORRECTIF (2026) : == compare les références des String, pas le texte, et la recherche passe
+			// de toute façon "blanc" en minuscules. Ce test était TOUJOURS faux : l'IA évaluait
+			// toujours le plateau comme si elle était Noire, même quand elle jouait Blanc.
+			if(joueur.equalsIgnoreCase("blanc")) {
 				this.ami = BLANC;
 				this.enemi = NOIR;
 			} else {
 				this.ami = NOIR;
 				this.enemi = BLANC;
 			}
+			// CORRECTIF (2026) : NegaMax / NegaScout supposent une évaluation À SOMME NULLE :
+			//     eval(p, "noir") == - eval(p, "blanc")
+			// car ils calculent le score de l'adversaire et se contentent d'y mettre un moins.
+			// Chaque critère doit donc être calculé pour LES DEUX camps et soustrait
+			// (le mien - le sien), comme l'étaient déjà ligne_max et evaluation. centre() et
+			// nbPion() n'étaient comptés que pour "ami" : vue de l'autre camp, la
+			// recherche récompensait l'IA quand elle PERDAIT ses propres pions.
+			// (Sans effet en 2008, car la recherche n'alternait jamais les joueurs.)
 			switch (niveau) {
 				case 4 :
-					res = (ligne_max(p,this.ami) - ligne_max(p,this.enemi)) 
+					// CORRECTIF (2026) : nb_voisin() peut renvoyer 0 (aucun voisin) -> division par zéro.
+					// Cette ArithmeticException était avalée en silence par NegaScout (score 0).
+					res = (ligne_max(p,this.ami) - ligne_max(p,this.enemi))
 					- evaluation(p,this.ami) + evaluation(p,this.enemi)
-					+ centre(p,this.ami) + (nbPion(p,this.ami) / this.nb_voisin(p,this.ami));
+					+ centre(p,this.ami) - centre(p,this.enemi)
+					+ (nbPion(p,this.ami) / Math.max(1, this.nb_voisin(p,this.ami)))
+					- (nbPion(p,this.enemi) / Math.max(1, this.nb_voisin(p,this.enemi)));
+					// CORRECTIF (2026) : "break" manquant. Sans lui, l'exécution « tombe » dans le
+					// case 3, qui ÉCRASE res : le niveau 4 était en fait identique au niveau 3.
+					break;
 				case 3 :
-					res = (ligne_max(p,this.ami) - ligne_max(p,this.enemi)) 
+					res = (ligne_max(p,this.ami) - ligne_max(p,this.enemi))
 					- evaluation(p,this.ami) + evaluation(p,this.enemi)
-					+ centre(p,this.ami);
+					+ centre(p,this.ami) - centre(p,this.enemi); // CORRECTIF (2026) : somme nulle
 				break;
 				case 2 : 
 					res = (ligne_max(p,this.ami) - ligne_max(p,this.enemi)) 
@@ -62,9 +82,9 @@ public class HeuristiqueLoa{
 					res = (ligne_max(p,this.ami) - ligne_max(p,this.enemi));
 				break;
 				default :
-					res = (ligne_max(p,this.ami) - ligne_max(p,this.enemi)) 
+					res = (ligne_max(p,this.ami) - ligne_max(p,this.enemi))
 					- evaluation(p,this.ami) + evaluation(p,this.enemi)
-					+ centre(p,this.ami);
+					+ centre(p,this.ami) - centre(p,this.enemi); // CORRECTIF (2026) : somme nulle
 			}
 			
 			return res;
@@ -86,8 +106,10 @@ public class HeuristiqueLoa{
 				}
 			}
 			
-			int temp = Integer.MIN_VALUE;
-			int max = Integer.MIN_VALUE;
+			int temp = 0;
+			// CORRECTIF (2026) : partir de 0 au lieu de Integer.MIN_VALUE (si une couleur n'avait plus de pion,
+			// MIN_VALUE était renvoyé et "a - b" dans eval() débordait).
+			int max = 0;
 			
 			for(int k=0;k<this.DIMENSION;k++) {
 				for(int l=0;l<this.DIMENSION;l++) {
@@ -99,8 +121,12 @@ public class HeuristiqueLoa{
 					}
 				}
 			}
-			if (liste_pion(p,couleur).size() == max) { 
-				max = Integer.MAX_VALUE;
+			if (liste_pion(p,couleur).size() == max) {
+				// CORRECTIF (2026) : c'était Integer.MAX_VALUE. eval() y AJOUTE ensuite d'autres termes, et
+				// Integer.MAX_VALUE + 1 repart à Integer.MIN_VALUE (dépassement d'entier) :
+				// une position GAGNANTE pouvait être notée comme la pire possible.
+				// Une constante grande mais sûre évite le débordement.
+				max = VICTOIRE;
 			}
 			return max;
 		}
@@ -252,8 +278,11 @@ public class HeuristiqueLoa{
                    y += aux.getJ();
                }
                if(p.size() != 0) {
-            	   x = Math.round(x / p.size());
-            	   y = Math.round(y / p.size());
+            	   // CORRECTIF (2026) : x / p.size() est une division ENTIÈRE : elle est tronquée AVANT
+            	   // l'appel à Math.round(), donc l'arrondi ne servait à rien (3,9 devenait 3, pas 4).
+            	   // Convertir d'abord en float pour que la division garde ses décimales.
+            	   x = Math.round((float) x / p.size());
+            	   y = Math.round((float) y / p.size());
                }
 
                return new Couple(x, y);
@@ -306,7 +335,8 @@ public class HeuristiqueLoa{
                            }
                    }
            }
-			return res/pion;
+			// CORRECTIF (2026) : éviter une division par zéro si la couleur n'a plus de pion.
+			return (pion == 0) ? 0 : res/pion;
 	       }
 	       
 	       private int[] valeur = {	-16,-8,-4,-4, -4,-4,-8,-16,
@@ -330,10 +360,15 @@ public class HeuristiqueLoa{
 	    	   int amis = 0 , enemie =0;
 	    	   for(int i=0;i<DIMENSION;i++)
 	    		   for(int j=0;j<DIMENSION;j++) {
-	    			   if(p.getTab()[i][j] == this.ami)
-	    				   amis++;
-	    			   else
-	    				   enemie++;
+	    			   // CORRECTIF (2026) : utiliser le paramètre "couleur" (il était ignoré, this.ami était
+	    			   // toujours utilisé) pour pouvoir appeler la fonction pour les deux camps.
+	    			   // NOIR = 1 et BLANC = -1, donc l'autre couleur est simplement -couleur.
+	    			   if(p.getTab()[i][j] == couleur)
+	    			   	amis++;
+	    			   // CORRECTIF (2026) : un simple "else" comptait aussi les cases VIDES (valeur 0) comme
+	    			   // des pions ennemis (une cinquantaine !). Tester explicitement la couleur ennemie.
+	    			   else if(p.getTab()[i][j] == -couleur)
+	    			   	enemie++;
 	    		   }
 	    	   
 	    	   return ((enemie*enemie) - amis);
@@ -346,9 +381,15 @@ public class HeuristiqueLoa{
                ArrayList<Couple> liste = liste_pion(p, couleur);
                Iterator<Couple> ite= liste.iterator();
                while (ite.hasNext()) {
-                      res += voisin(ite.next().getI(),ite.next().getJ(),p).size();
+                      // CORRECTIF (2026) : chaque appel à ite.next() FAIT AVANCER l'itérateur. L'appeler deux fois
+                      // prenait la ligne d'un pion et la colonne du SUIVANT, sautait la moitié
+                      // des pions, et levait NoSuchElementException quand leur nombre était impair.
+                      // Appeler next() une seule fois et garder le résultat dans une variable.
+                      Couple pion = ite.next();
+                      res += voisin(pion.getI(),pion.getJ(),p).size();
                }
-			return Math.round(res/liste.size());
+			// CORRECTIF (2026) : éviter une division par zéro (Math.round sur une division entière ne servait à rien).
+			return (liste.size() == 0) ? 0 : res / liste.size();
 	       }
 	       
 }

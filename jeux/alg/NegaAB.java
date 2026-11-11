@@ -16,6 +16,8 @@ import moteur.Plateau;
 public class NegaAB {
 		private final static int PROFMAXDEFAUT = 3;
 		private int profMax = PROFMAXDEFAUT;
+		// CORRECTIF (2026) : remplace Integer.MIN_VALUE / MAX_VALUE, voir le commentaire dans NegaScout.
+		private final static int INFINI = 1000000;
 		
 		private HeuristiqueLoa h;
 		private String joueurMax;
@@ -29,7 +31,7 @@ public class NegaAB {
 		 */
 		public NegaAB(HeuristiqueLoa h,String joueurMax){
 			this.h = h;
-			this.joueurMax = joueurMax;
+			this.joueurMax = joueurMax.toLowerCase(); // CORRECTIF (2026) : les identifiants de couleur sont comparés en minuscules
 			this.nb = 0;
 		}
 		/**
@@ -40,7 +42,7 @@ public class NegaAB {
 		 */
 		public NegaAB(HeuristiqueLoa h, String joueurMax,int profMaxi){
 			this.h = h;
-			this.joueurMax = joueurMax;
+			this.joueurMax = joueurMax.toLowerCase(); // CORRECTIF (2026) : les identifiants de couleur sont comparés en minuscules
 			this.profMax = profMaxi;
 			this.nb = 0;
 		}
@@ -60,7 +62,7 @@ public class NegaAB {
 			if(lst.size() == 0) {
 				return null;
 			}
-			int meilleur = Integer.MIN_VALUE;
+			int meilleur = -INFINI; // CORRECTIF (2026) : voir INFINI
 			
 			int aux;
 			String coup = null,meilleurCoup = null;
@@ -69,7 +71,8 @@ public class NegaAB {
 			      coup = itr.next();
 			      Plateau nouveauPlateau = p.copy();
 			      nouveauPlateau.play(coup,this.joueurMax);
-			      aux = nAB(nouveauPlateau,Integer.MIN_VALUE,Integer.MAX_VALUE,0);
+			      // CORRECTIF (2026) : après notre coup c'est à l'adversaire, et son score est négativé (voir NegaScout).
+			      aux = -nAB(nouveauPlateau,-INFINI,-meilleur,0,adversaire(this.joueurMax));
 			      if(meilleur < aux) {
 			    	  meilleur = aux;
 			    	  meilleurCoup = coup; 
@@ -87,26 +90,39 @@ public class NegaAB {
 		 * @param prof profondeur actuelle
 		 * @return valeur maximum estimé par l'heuristique du plateau pour le joueur
 		 */
-		public int nAB(Plateau p,int alpha,int beta,int prof) {
+		public int nAB(Plateau p,int alpha,int beta,int prof,String joueur) {
+			// CORRECTIF (2026) : mêmes bugs que dans NegaScout (voir ses commentaires) : le joueur
+			// doit alterner (paramètre joueur) et les feuilles sont évaluées pour le joueur
+			// qui a le trait.
 			String coup;
 			int val;
 			if(prof == this.profMax || p.finDePartie()){
-				return this.h.eval(p,this.joueurMax,3);
+				return this.h.eval(p,joueur,3);
 			}
-			ArrayList<String> lst = p.coupsPossibles(this.joueurMax);
+			ArrayList<String> lst = p.coupsPossibles(joueur);
+			if(lst.size() == 0) {
+				return this.h.eval(p,joueur,3);
+			}
 			Iterator<String> itr = lst.iterator();
 			while (itr.hasNext()) {
 				coup = itr.next();
-			    Plateau nouveauPlateau = p.copy();
-			    nouveauPlateau.play(coup,this.joueurMax); 
-			    val = -nAB(nouveauPlateau,-beta,-alpha,prof+1);
-			    if (val > alpha) {
-			    	alpha = val;
-			    	if(alpha > beta)
-			    		return alpha;
-			    }
+				Plateau nouveauPlateau = p.copy();
+				nouveauPlateau.play(coup,joueur);
+				val = -nAB(nouveauPlateau,-beta,-alpha,prof+1,adversaire(joueur));
+				if (val > alpha) {
+					alpha = val;
+					// CORRECTIF (2026) : la condition de coupure est alpha >= beta. Avec ">", un nœud
+					// dont la valeur valait exactement beta continuait d'explorer pour rien.
+					if(alpha >= beta)
+						return alpha;
+				}
 			}
 			return alpha;
+		}
+
+		// CORRECTIF (2026) : fonction utilitaire pour alterner le joueur à chaque niveau de l'arbre.
+		private static String adversaire(String joueur) {
+			return joueur.equalsIgnoreCase("noir") ? "blanc" : "noir";
 		}
 
 }

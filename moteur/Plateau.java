@@ -67,7 +67,10 @@ public class Plateau implements Partie1 {
         int c = 0;
         /* on test si le pion est bien de la couleur du joueur */
         if ((this.tab[a[0].getI()][a[0].getJ()] == BLANC && player.compareToIgnoreCase("noir") == 0) ||
-        		(this.tab[a[0].getI()][a[0].getJ()] == NOIR && player.compareToIgnoreCase("blanc") == 0))
+        		(this.tab[a[0].getI()][a[0].getJ()] == NOIR && player.compareToIgnoreCase("blanc") == 0) ||
+        		// CORRECTIF (2026) : une case de départ VIDE était aussi acceptée. L'IA ne le demandait
+        		// jamais, mais estValide() doit la refuser d'elle-même.
+        		(this.tab[a[0].getI()][a[0].getJ()] == 0))
         	return false;
         /* on test si c'est pas hors du plateau ou si le mouvement ne deplace pas le pion*/
         if(a[0].getI()<0 || a[1].getI()<0 || a[0].getJ()>=DIMENSION || a[1].getJ()>=DIMENSION 
@@ -154,28 +157,26 @@ public class Plateau implements Partie1 {
                 } else {
 
                     if (direction == 4) {
-                        for (int f = a[0].getI(); f < a[1].getI(); f++) {
-                            for (int g = a[0].getJ(); g > a[1].getJ(); g--) {
-                                if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g]!= 0) {
-                                    return false;
-                                }
-                                /*if(tab[f][g] == tab[a[0].getI()][a[0].getJ()] && a[0].getI()!=f && a[0].getJ()!=g
-                                		&& tab[f-1][g+1]!= 0){
-                                	return false;
-                                }*/
+                        // CORRECTIF (2026) : la version de 2008 utilisait deux boucles IMBRIQUÉES (f sur les lignes, g sur
+                        // les colonnes), qui vérifient toutes les cases du RECTANGLE entre le départ et
+                        // l'arrivée, pas seulement les cases SUR la diagonale. Un coup diagonal légal était
+                        // refusé dès qu'un pion ennemi se trouvait n'importe où dans ce rectangle.
+                        // Sur une diagonale, la ligne et la colonne avancent ENSEMBLE : une boucle, un compteur k.
+                        for (int k = 1; k < c; k++) {
+                            int f = a[0].getI() + k;
+                            int g = a[0].getJ() - k;
+                            if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g] != 0) {
+                                return false;
                             }
                         }
                         return true;
                     } else {
-                        for (int f = a[0].getI(); f > a[1].getI(); f--) {
-                            for (int g = a[0].getJ(); g < a[1].getJ(); g++) {
-                                if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g]!= 0) {
-                                    return false;
-                                }
-                                /*if(tab[f][g] == tab[a[0].getI()][a[0].getJ()] && a[0].getI()!=f && a[0].getJ()!=g
-                                		&& tab[f+1][g-1]!= 0){
-                                	return false;
-                                }*/
+                        // CORRECTIF (2026) : une seule boucle le long de la diagonale (voir le premier cas diagonal plus haut).
+                        for (int k = 1; k < c; k++) {
+                            int f = a[0].getI() - k;
+                            int g = a[0].getJ() + k;
+                            if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g] != 0) {
+                                return false;
                             }
                         }
                         return true;
@@ -191,30 +192,23 @@ public class Plateau implements Partie1 {
 	        } else {
 	
 	            if (direction == 2) {
-	                for (int f = a[0].getI(); f < a[1].getI(); f++) {
-	                    for (int g = a[0].getJ(); g < a[1].getJ(); g++) {
-	                        if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g]!= 0) {
-	                        	
-	                            return false;
-	                        }
-	                        /*if(tab[f][g] == tab[a[0].getI()][a[0].getJ()] && a[0].getI()!=f && a[0].getJ()!=g
-	                        		&& tab[f-1][g-1]!= 0){
-	                        	return false;
-	                        }*/
-	                    }
+	                // CORRECTIF (2026) : une seule boucle le long de la diagonale (voir le premier cas diagonal plus haut).
+	                for (int k = 1; k < c; k++) {
+	                	int f = a[0].getI() + k;
+	                	int g = a[0].getJ() + k;
+	                	if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g] != 0) {
+	                		return false;
+	                	}
 	                }
 	                return true;
 	            } else {
-	                for (int f = a[0].getI(); f > a[1].getI(); f--) {
-	                    for (int g = a[0].getJ(); g > a[1].getJ(); g--) {
-	                        if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g]!= 0) {
-	                            return false;
-	                        }
-	                        /*if(tab[f][g] == tab[a[0].getI()][a[0].getJ()] && a[0].getI()!=f && a[0].getJ()!=g
-	                        		&& tab[f+1][g+1]!= 0){
-	                        	return false;
-	                        }*/
-	                    }
+	                // CORRECTIF (2026) : une seule boucle le long de la diagonale (voir le premier cas diagonal plus haut).
+	                for (int k = 1; k < c; k++) {
+	                	int f = a[0].getI() - k;
+	                	int g = a[0].getJ() - k;
+	                	if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g] != 0) {
+	                		return false;
+	                	}
 	                }
 	                return true;
 	            }

@@ -75,7 +75,10 @@ public class Minimax {
 	 */
 	private int MaxMin(Plateau p,int profondeur,int nb) {
 		ArrayList<String> lst;
-	    nb++;
+	    // CORRECTIF (2026) : "nb" est un paramètre int, et Java passe les types primitifs PAR VALEUR :
+	    // nb++ ne modifiait qu'une copie locale, donc le nombre de nœuds affiché valait toujours 0.
+	    // On compte dans un attribut à la place (nbnoeuds était déclaré mais jamais utilisé).
+	    this.nbnoeuds++;
 		if(profondeur == this.profMax) 
 			return this.h.eval(p);
 		lst = p.coupsPossibles(this.joueurMax);	
@@ -104,7 +107,10 @@ public class Minimax {
 	 */
 	private int MinMax(Plateau p,int profondeur,int nb) {
 		ArrayList<String> lst;
-		nb++;
+		// CORRECTIF (2026) : "nb" est un paramètre int, et Java passe les types primitifs PAR VALEUR :
+		// nb++ ne modifiait qu'une copie locale, donc le nombre de nœuds affiché valait toujours 0.
+		// On compte dans un attribut à la place (nbnoeuds était déclaré mais jamais utilisé).
+		this.nbnoeuds++;
 		if(profondeur == this.profMax) { 
 			return this.h.eval(p);
 		}
@@ -131,6 +137,7 @@ public class Minimax {
 	 */
 	public String meilleurCoup(Plateau p, String j) {
 		int nbNoeud = 0;
+		this.nbnoeuds = 0; // CORRECTIF (2026) : remise à zéro du compteur pour cette recherche
 		ArrayList<String> lst = p.coupsPossibles(j);
 		if(lst.size() == 0) {
 			return null;
@@ -152,7 +159,7 @@ public class Minimax {
 		      }
 		}
 		
-		System.out.println("nombre de noeud exploré : " + nbNoeud);
+		System.out.println("nombre de noeud exploré : " + this.nbnoeuds); // CORRECTIF (2026) : afficher le vrai compteur
 		return meilleurCoup;
 	}
 	

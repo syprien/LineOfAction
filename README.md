@@ -27,6 +27,7 @@ Les étapes de 2008 antérieures au rendu ne contiennent que les fichiers envoy�
 | `v2026-rival` | 2026 | Rival, une IA écrite par Claude Haiku avec la même limite de taille |
 | `v2026-histoire` | 2026 | ce README et l'histoire du projet |
 | `v2026-ultime` | 2026 | l'algo ultime : l'évaluation de 2008 avec une recherche moderne et une bibliothèque d'ouvertures |
+| `v2026-ultime-rapide` | 2026 | l'algo ultime avec un plateau rapide : bitboards, coups en entiers, jouer puis annuler |
 
 Pour voir toutes les corrections, avec leurs explications :
 
@@ -36,7 +37,8 @@ git diff v2008-rendu v2026-corrige
 
 ## Construire et jouer
 
-Il faut Java 11 ou plus (`javac` et `jar` dans le PATH).
+Il faut Java 11 ou plus (`javac` et `jar` dans le PATH). Avec [mise](https://mise.jdx.dev), `mise install` installe
+la version indiquée dans `mise.toml`.
 
 ```bash
 ./build.sh                  # ou .\build.ps1 sous Windows

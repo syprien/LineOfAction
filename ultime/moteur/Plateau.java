@@ -1,67 +1,82 @@
-/**
- * Cette classe regroupe l'ensemble des éléments de gestion du plateau
- * @author Syprien - tazzzz
- * @version 1.0
- */
 package ultime.moteur;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 
 /**
- * Cette classe regroupe tout les fonctions ainsi que la structure de donnée nécessaire au fonctionnement
- * d'une partie de Line Of Action
- * 
- * @author tazzzz-syprien
+ * ULTIME (2026), étape « rapide » : le plateau réécrit pour la vitesse. Les règles sont celles
+ * du plateau de 2008 (moteur/Plateau.java), c'est la mécanique qui change :
+ *  - un seul plateau, sur lequel la recherche JOUE puis ANNULE chaque coup (jouer / annuler),
+ *    au lieu de copier les 64 cases pour chaque coup essayé ;
+ *  - un coup est un entier (case de départ * 64 + case d'arrivée) au lieu d'une chaîne "B1-D3" ;
+ *  - les pions de chaque couleur sont aussi rangés dans un « bitboard » : un long de 64 bits,
+ *    un bit par case. Compter les pions d'une ligne devient un seul Long.bitCount(), et
+ *    chercher un groupe de pions voisins se fait par décalages de bits, sans ArrayList.
+ * Une case est numérotée colonne * 8 + ligne : A1 = 0, A2 = 1, ..., B1 = 8, ..., H8 = 63.
+ * Les chaînes ("noir", "B1-D3") ne servent plus qu'à parler au serveur et aux tests.
  *
+ * @author Syprien - tazzzz
  */
-
 public class Plateau {
 
-    // ULTIME (2026) : hachage de Zobrist. Chaque couple (couleur, case) reçoit un nombre
-    // aléatoire de 64 bits ; l'empreinte d'une position est le XOR des nombres de ses pions.
-    // La table est static : elle est tirée une seule fois, au chargement de la classe, et
-    // partagée par toutes les copies du plateau (sinon une même position aurait des empreintes
-    // différentes selon la copie). Graine fixe : les parties sont reproductibles.
-    static final private long[][][] ZOBRIST = new long[2][8][8];
+    public static final byte NOIR = 1;
+    public static final byte BLANC = -1;
+
+    // Hachage de Zobrist : mêmes nombres qu'avant (même graine, même ordre de tirage), donc les
+    // empreintes, et la bibliothèque d'ouvertures qui en dépend, ne changent pas.
+    private static final long[][] ZOBRIST = new long[2][64];
+
+    // Masques des lignes : LIGNE[direction][case] contient toutes les cases de la ligne qui passe
+    // par la case, dans cette direction. Directions (dc, dl) : verticale, horizontale, diagonale « / »,
+    // diagonale « \ ».
+    private static final int[] DC = {0, 1, 1, 1}, DL = {1, 0, 1, -1};
+    private static final long[][] LIGNE = new long[4][64];
+
+    /** VOISINS[case] : les 8 cases autour de la case. */
+    public static final long[] VOISINS = new long[64];
+
     static {
         java.util.Random r = new java.util.Random(2008);
         for (int c = 0; c < 2; c++)
-            for (int i = 0; i < 8; i++)
-                for (int j = 0; j < 8; j++)
-                    ZOBRIST[c][i][j] = r.nextLong();
+            for (int s = 0; s < 64; s++)
+                ZOBRIST[c][s] = r.nextLong();
+        for (int s = 0; s < 64; s++) {
+            int c = s >> 3, l = s & 7;
+            for (int d = 0; d < 4; d++)
+                for (int k = -7; k <= 7; k++)
+                    if (dedans(c + k * DC[d], l + k * DL[d])) LIGNE[d][s] |= 1L << (s + k * (8 * DC[d] + DL[d]));
+            for (int dc = -1; dc <= 1; dc++)
+                for (int dl = -1; dl <= 1; dl++)
+                    if ((dc != 0 || dl != 0) && dedans(c + dc, l + dl)) VOISINS[s] |= 1L << (s + 8 * dc + dl);
+        }
     }
-    private long hash;
 
-    static final private byte NOIR = 1;
-    static final private byte BLANC = -1;
-    static final private char PION_NOIR = 'X';
-    static final private char PION_BLANC = 'O';
-    static final private byte DIMENSION = 8;
-   
-    private byte[][] tab;
-    private int nbPionNoir;
-    private int nbPionBlanc;
+    private final byte[] cases = new byte[64];
+    private long noirs, blancs, hash;
+
+    // Pile d'annulation : pour chaque coup joué, le coup et la couleur du pion éventuellement pris.
+    private final int[] pileCoups = new int[1024];
+    private final byte[] pilePris = new byte[1024];
+    private int hauteur;
 
     public Plateau() {
-        this.tab = new byte[DIMENSION][DIMENSION];
-        for(int i = 0 ;i<DIMENSION; i++) {
-			for(int j = 0 ;j<DIMENSION; j++) {
-				this.tab[i][j]=0;
-			}
+        for (int i = 1; i < 7; i++) {
+            poser(i, BLANC);          // colonne A, lignes 2 à 7
+            poser(56 + i, BLANC);     // colonne H
+            poser(i * 8, NOIR);       // ligne 1, colonnes B à G
+            poser(i * 8 + 7, NOIR);   // ligne 8
         }
-        for(int i=1;i<7;i++) {
-        	this.tab[0][i] = BLANC;
-        	this.tab[7][i] = BLANC;
-        	this.tab[i][0] = NOIR;
-        	this.tab[i][7] = NOIR;
-        }
-        this.nbPionBlanc=12;
-        this.nbPionNoir=12;
-        this.hash = calculerHash(this);
+        hash = calculerHash(this);
     }
 
-    /** Numéro de couleur pour la table de Zobrist : 0 pour noir, 1 pour blanc. */
+    private void poser(int s, byte couleur) {
+        cases[s] = couleur;
+        if (couleur == NOIR) noirs |= 1L << s; else blancs |= 1L << s;
+    }
+
+    private static boolean dedans(int c, int l) {
+        return c >= 0 && c < 8 && l >= 0 && l < 8;
+    }
+
     private static int indice(byte couleur) {
         return couleur == NOIR ? 0 : 1;
     }
@@ -69,9 +84,8 @@ public class Plateau {
     /** Empreinte recalculée depuis zéro (sert au démarrage et aux tests). */
     public static long calculerHash(Plateau p) {
         long h = 0;
-        for (int i = 0; i < DIMENSION; i++)
-            for (int j = 0; j < DIMENSION; j++)
-                if (p.tab[i][j] != 0) h ^= ZOBRIST[indice(p.tab[i][j])][i][j];
+        for (int s = 0; s < 64; s++)
+            if (p.cases[s] != 0) h ^= ZOBRIST[indice(p.cases[s])][s];
         return h;
     }
 
@@ -79,627 +93,168 @@ public class Plateau {
     public long getHash() {
         return hash;
     }
-    
+
+    /** Les pions de cette couleur, un bit par case. */
+    public long pions(byte couleur) {
+        return couleur == NOIR ? noirs : blancs;
+    }
+
+    /** Le contenu d'une case : NOIR, BLANC ou 0. */
+    public byte contenu(int s) {
+        return cases[s];
+    }
+
+    // ------------------------------------------------------------------ coups
+
+    /**
+     * Range dans coups[] les coups légaux de cette couleur et renvoie leur nombre.
+     * Règle de Lines of Action : un pion avance d'autant de cases qu'il y a de pions (des deux
+     * couleurs) sur la ligne de son déplacement ; il peut sauter ses propres pions, pas ceux de
+     * l'adversaire ; il peut prendre un pion adverse sur la case d'arrivée.
+     */
+    public int coups(byte couleur, int[] coups) {
+        long amis = pions(couleur), occupe = noirs | blancs;
+        int n = 0;
+        for (long reste = amis; reste != 0; reste &= reste - 1) {
+            int s = Long.numberOfTrailingZeros(reste), c = s >> 3, l = s & 7;
+            for (int d = 0; d < 4; d++) {
+                int pas = Long.bitCount(occupe & LIGNE[d][s]);
+                for (int sens = -1; sens <= 1; sens += 2) {
+                    int dc = sens * DC[d], dl = sens * DL[d];
+                    if (!dedans(c + pas * dc, l + pas * dl)) continue;
+                    int delta = 8 * dc + dl, arrivee = s + pas * delta;
+                    if ((amis >>> arrivee & 1) != 0) continue;
+                    boolean libre = true;
+                    for (int k = 1; k < pas && libre; k++)
+                        libre = cases[s + k * delta] != -couleur;
+                    if (libre) coups[n++] = s << 6 | arrivee;
+                }
+            }
+        }
+        return n;
+    }
+
+    /** Joue le coup (départ * 64 + arrivée) ; annuler() le défait. */
+    public void jouer(int coup) {
+        int de = coup >>> 6, vers = coup & 63;
+        byte pion = cases[de], pris = cases[vers];
+        long bitDe = 1L << de, bitVers = 1L << vers;
+        if (pris != 0) {
+            hash ^= ZOBRIST[indice(pris)][vers];
+            if (pris == NOIR) noirs ^= bitVers; else blancs ^= bitVers;
+        }
+        hash ^= ZOBRIST[indice(pion)][de] ^ ZOBRIST[indice(pion)][vers];
+        if (pion == NOIR) noirs ^= bitDe | bitVers; else blancs ^= bitDe | bitVers;
+        cases[vers] = pion;
+        cases[de] = 0;
+        pileCoups[hauteur] = coup;
+        pilePris[hauteur++] = pris;
+    }
+
+    /** Annule le dernier coup joué. */
+    public void annuler() {
+        int coup = pileCoups[--hauteur], de = coup >>> 6, vers = coup & 63;
+        byte pion = cases[vers], pris = pilePris[hauteur];
+        long bitDe = 1L << de, bitVers = 1L << vers;
+        hash ^= ZOBRIST[indice(pion)][de] ^ ZOBRIST[indice(pion)][vers];
+        if (pion == NOIR) noirs ^= bitDe | bitVers; else blancs ^= bitDe | bitVers;
+        cases[de] = pion;
+        cases[vers] = pris;
+        if (pris != 0) {
+            hash ^= ZOBRIST[indice(pris)][vers];
+            if (pris == NOIR) noirs ^= bitVers; else blancs ^= bitVers;
+        }
+    }
+
+    // ------------------------------------------------------------------ groupes de pions
+
+    /** Les 8 voisins de chaque case de x, et x lui-même, par décalages de bits. */
+    private static long etendre(long x) {
+        final long PAS_LIGNE_1 = 0xFEFEFEFEFEFEFEFEL, PAS_LIGNE_8 = 0x7F7F7F7F7F7F7F7FL;
+        x |= (x << 1 & PAS_LIGNE_1) | (x >>> 1 & PAS_LIGNE_8);
+        return x | x << 8 | x >>> 8;
+    }
+
+    /** Le groupe de pions voisins (8-connexité) qui contient les pions de depart, parmi pions. */
+    public static long groupe(long depart, long pions) {
+        long g = depart, avant;
+        do {
+            avant = g;
+            g = etendre(g) & pions;
+        } while (g != avant);
+        return g;
+    }
+
+    /** Vrai si tous les pions de cette couleur forment un seul groupe. */
+    public boolean relie(byte couleur) {
+        long p = pions(couleur);
+        return p != 0 && groupe(p & -p, p) == p;
+    }
+
+    // ------------------------------------------------------------------ interface chaînes
+
+    /** "B1-D3" -> entier. */
+    public static int lireCoup(String coup) {
+        int de = (coup.charAt(0) - 'A') * 8 + coup.charAt(1) - '1';
+        int vers = (coup.charAt(3) - 'A') * 8 + coup.charAt(4) - '1';
+        return de << 6 | vers;
+    }
+
+    /** entier -> "B1-D3". */
+    public static String ecrireCoup(int coup) {
+        return nomCase(coup >>> 6) + "-" + nomCase(coup & 63);
+    }
+
+    private static String nomCase(int s) {
+        return "" + (char) ('A' + (s >> 3)) + (char) ('1' + (s & 7));
+    }
+
+    public static byte couleur(String joueur) {
+        return joueur.equalsIgnoreCase("noir") ? NOIR : BLANC;
+    }
+
+    public void play(String move, String player) {
+        jouer(lireCoup(move));
+    }
+
+    public ArrayList<String> coupsPossibles(String cJoueur) {
+        int[] t = new int[128];
+        int n = coups(couleur(cJoueur), t);
+        ArrayList<String> resultat = new ArrayList<String>();
+        for (int k = 0; k < n; k++) resultat.add(ecrireCoup(t[k]));
+        return resultat;
+    }
 
     public boolean estValide(String move, String player) {
-        // TODO Syprien : Valider le coup
-
-        Couple[] a = trad(move);
-
-        int x = a[0].getI() - a[1].getI();
-        int y = a[0].getJ() - a[1].getJ();
-
-        int direction = direction(a[0], a[1]);
-
-        int c = 0;
-        /* on test si le pion est bien de la couleur du joueur */
-        if ((this.tab[a[0].getI()][a[0].getJ()] == BLANC && player.compareToIgnoreCase("noir") == 0) ||
-        		(this.tab[a[0].getI()][a[0].getJ()] == NOIR && player.compareToIgnoreCase("blanc") == 0) ||
-        		// CORRECTIF (2026) : une case de départ VIDE était aussi acceptée. L'IA ne le demandait
-        		// jamais, mais estValide() doit la refuser d'elle-même.
-        		(this.tab[a[0].getI()][a[0].getJ()] == 0))
-        	return false;
-        /* on test si c'est pas hors du plateau ou si le mouvement ne deplace pas le pion*/
-        if(a[0].getI()<0 || a[1].getI()<0 || a[0].getJ()>=DIMENSION || a[1].getJ()>=DIMENSION 
-        		|| a[0].getJ()<0 || a[1].getJ()<0 || (x == 0 && y ==0)){
-        	return false;
-        }
-        /* on test si la case d'arrive n'est pas déja occupé par un pion de la couleur du joueur */
-        if(this.tab[a[0].getI()][a[0].getJ()] == this.tab[a[1].getI()][a[1].getJ()]) {
-        	return false;
-        }
-        // Horizontale
-        if (direction == 7 || direction == 3) {
-            c = compteHorizonztale(a[0].getJ());
-
-            if (c != Math.abs(x)) {
-                return false;
-            } else {
-                if (direction == 3) {
-                    for (int f = a[0].getI(); f < a[1].getI(); f++) {
-                        if (tab[f][a[0].getJ()] != tab[a[0].getI()][a[0].getJ()] && tab[f][a[0].getJ()] != 0) {
-                            return false;
-                        }
-                        /*if(tab[f][a[0].getJ()] == tab[a[0].getI()][a[0].getJ()] && a[0].getI()!=f 
-                        		&& tab[f-1][a[0].getJ()]!= 0){
-                        	return false;
-                        }*/
-                    }
-                    return true;
-                } else {
-                    for (int f = a[0].getI(); f > a[1].getI(); f--) {
-                        if (tab[f][a[0].getJ()] != tab[a[0].getI()][a[0].getJ()] && tab[f][a[0].getJ()] != 0) {
-                            return false;
-                        }
-                        /*if(tab[f][a[0].getJ()] == tab[a[0].getI()][a[0].getJ()] && a[0].getI()!=f 
-                        		&& tab[f+1][a[0].getJ()]!= 0){
-                        	return false;
-                        }*/
-                    }
-                    return true;
-                }
-            }
-
-            // Verticale
-        } else if (direction == 1 || direction == 5) {
-            c = compteVerticale(a[0].getI());
-            if (c != Math.abs(y)) {
-                return false;
-            } else {
-                if (direction == 1) {
-                    for (int f = a[0].getJ(); f < a[1].getJ(); f++) {
-                        if (tab[a[0].getI()][f] != tab[a[0].getI()][a[0].getJ()] && tab[a[0].getI()][f]!= 0) {
-                            return false;
-                        }
-                        /*if(tab[a[0].getI()][f] == tab[a[0].getI()][a[0].getJ()] && a[0].getJ()!=f 
-                        		&& tab[a[0].getI()][f-1]!= 0){
-                        	return false;
-                        }*/
-                    }
-                    return true;
-                } else {
-                    for (int f = a[0].getJ(); f > a[1].getJ(); f--) {
-                        if (tab[a[0].getI()][f] != tab[a[0].getI()][a[0].getJ()] && tab[a[0].getI()][f]!= 0) {
-                            return false;
-                        }
-                        /*if(tab[a[0].getI()][f] == tab[a[0].getI()][a[0].getJ()] && a[0].getJ()!=f 
-                        		&& tab[a[0].getI()][f+1]!= 0){
-                        	return false;
-                        }*/
-                    }
-                    return true;
-                }
-            }
-
-            // Antislash
-        } else if (direction == 8 || direction == 4) {
-
-            // x et y de signes différents donc diagonale haut-gauche /
-            // bas-droit
-            if (x - y != 0) {
-                c = compteAntiSlash(a[0].getI(), a[0].getJ());
-
-                if (c != Math.abs(y) || c != Math.abs(x)) {
-                    return false;
-                } else {
-
-                    if (direction == 4) {
-                        // CORRECTIF (2026) : la version de 2008 utilisait deux boucles IMBRIQUÉES (f sur les lignes, g sur
-                        // les colonnes), qui vérifient toutes les cases du RECTANGLE entre le départ et
-                        // l'arrivée, pas seulement les cases SUR la diagonale. Un coup diagonal légal était
-                        // refusé dès qu'un pion ennemi se trouvait n'importe où dans ce rectangle.
-                        // Sur une diagonale, la ligne et la colonne avancent ENSEMBLE : une boucle, un compteur k.
-                        for (int k = 1; k < c; k++) {
-                            int f = a[0].getI() + k;
-                            int g = a[0].getJ() - k;
-                            if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g] != 0) {
-                                return false;
-                            }
-                        }
-                        return true;
-                    } else {
-                        // CORRECTIF (2026) : une seule boucle le long de la diagonale (voir le premier cas diagonal plus haut).
-                        for (int k = 1; k < c; k++) {
-                            int f = a[0].getI() - k;
-                            int g = a[0].getJ() + k;
-                            if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g] != 0) {
-                                return false;
-                            }
-                        }
-                        return true;
-                    }
-                }
-
-            }
-        } else if (direction == 2 || direction == 6) {
-            // slash
-            c = compteSlash(a[0].getI(), a[0].getJ());
-	        if (c != Math.abs(x) || c != Math.abs(y)) {
-	            return false;
-	        } else {
-	
-	            if (direction == 2) {
-	                // CORRECTIF (2026) : une seule boucle le long de la diagonale (voir le premier cas diagonal plus haut).
-	                for (int k = 1; k < c; k++) {
-	                	int f = a[0].getI() + k;
-	                	int g = a[0].getJ() + k;
-	                	if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g] != 0) {
-	                		return false;
-	                	}
-	                }
-	                return true;
-	            } else {
-	                // CORRECTIF (2026) : une seule boucle le long de la diagonale (voir le premier cas diagonal plus haut).
-	                for (int k = 1; k < c; k++) {
-	                	int f = a[0].getI() - k;
-	                	int g = a[0].getJ() - k;
-	                	if (tab[f][g] != tab[a[0].getI()][a[0].getJ()] && tab[f][g] != 0) {
-	                		return false;
-	                	}
-	                }
-	                return true;
-	            }
-	        }
-        }
-        return false;
-    }
-
-    private int direction(Couple d, Couple a) {
-
-        int x = a.getI() - d.getI();
-        int y = a.getJ() - d.getJ();
-
-        if (x == 0 && y == 0) {
-            return 0;
-        }
-
-        if (x == 0) {
-            if (y > 0) {
-                return 1;
-            } else {
-                return 5;
-            }
-        } else if (x > 0) {
-            if (y > 0) {
-                return 2;
-            } else if (y == 0) {
-                return 3;
-            } else {
-                return 4;
-            }
-        } else {
-            if (y < 0) {
-                return 6;
-            } else if (y == 0) {
-                return 7;
-            } else {
-                return 8;
-            }
-        }
-
-    }
-
-    private int compteHorizonztale(int j) {
-        int c = 0;
-        for (int i = 0; i < DIMENSION; i++) {
-            if (tab[i][j] != 0) {
-                c++;
-            }
-        }
-        return c;
-
-    }
-
-    private int compteVerticale(int i) {
-        int c = 0;
-        for (int j = 0; j < DIMENSION; j++) {
-            if (tab[i][j] != 0) {
-                c++;
-            }
-        }
-        return c;
-
-    }
-    // TODO tazzzz : Vérifier les bornes des whiles
-    private int compteSlash(int i, int j) {
-        int a = i-1;
-        int b = j-1;
-
-        int c = 1;
-        while (a >= 0 && b >= 0) {
-            if (tab[a][b] != 0) {
-                c++;
-            }
-            a--;
-            b--;
-            
-        }
-
-        b = j+1;
-        a = i+1;
-        while (a < DIMENSION && b < DIMENSION) {
-            if (tab[a][b] != 0) {
-                c++;
-            }
-            a++;
-            b++;
-        }
-
-        return c;
-
-    }
-    // TODO tazzzz : Vérifier les bornes des whiles
-    private int compteAntiSlash(int i, int j) {
-
-        int a = i;
-        int b = j;
-
-        int c = 0;
-
-        while (a >= 0 && b < DIMENSION) {
-            if (tab[a][b] != 0) {
-                c++;
-            }
-            a--;
-            b++;
-        }
-        b = j-1;
-        a = i+1;
-        while (a < DIMENSION && b >= 0) {
-            if (tab[a][b] != 0) {
-                c++;
-            }
-            a++;
-            b--;
-        }
-
-        return c;
-
-    }
-    
-    /**
-     * Traduit un mouvement envoye par le serveur en deux objets de type Couple facilement
-     * exploitable par le programme
-     * @param place le mouvement envoyé par le serveur
-     * @return une tableau de deux Couples
-     */
-    private Couple[] trad(String place) {
-
-        Couple[] c = new Couple[2];
-
-        c[0] = new Couple(tradChar(place.charAt(0)), Character.getNumericValue(place.charAt(1))-1);
-        c[1] = new Couple(tradChar(place.charAt(3)), Character.getNumericValue(place.charAt(4))-1);
-        return c;
+        return coupsPossibles(player).contains(move);
     }
 
     /**
-     * traduit le caractère donne pour un mouvement en entier pour le situé dans le plateau
-     * @param c le caratère
-     * @return la traduction en entier du caractère pour le plateau
+     * CORRECTIF (2026) : la version de 2008 s'arrêtait après avoir examiné les DEUX premiers pions
+     * rencontrés (compteur « ok »), même s'ils étaient de la même couleur. Sur le plateau de départ, ce
+     * sont A2 et A3, deux pions blancs : seule la victoire de Blanc était détectée, celle de Noir jamais
+     * tant que la colonne A gardait au moins deux pions blancs. Les deux couleurs sont maintenant testées.
      */
-    private int tradChar(char c) {
-        int i = 0;
-        switch (c) {
-        case 'A':
-            i = 0;
-            break;
-        case 'B':
-            i = 1;
-            break;
-        case 'C':
-            i = 2;
-            break;
-        case 'D':
-            i = 3;
-            break;
-        case 'E':
-            i = 4;
-            break;
-        case 'F':
-            i = 5;
-            break;
-        case 'G':
-            i = 6;
-            break;
-        case 'H':
-            i = 7;
-            break;
-        case 'Z':
-        	i = -1;
-        	break;
-        default :
-        	i = -2;
-        }
-        return i;
-    }
-    
     public boolean finDePartie() {
-    	int i,j,ok;
-    	boolean finNoir=false,
-    			finBlanc=false;
-    	i=j=ok=0;
-    	while (ok<2 && (i<DIMENSION && j <DIMENSION) && !finNoir && !finBlanc){
-    		if(this.tab[i][j] == NOIR){
-    			finNoir = parcoursChemin(i,j);
-    			ok++;
-    		}
-    		if(this.tab[i][j] == BLANC){
-    			finBlanc = parcoursChemin(i,j);
-    			ok++;
-    		}
-    		if(j==7){
-    			i++;
-    			j=0;
-    		} else 
-    			j++;
-    	}
-        return finNoir || finBlanc;
-    }
-    
-    
-    /**
-     * Fonction de parcours d'un chemin de pion dans le plateau de jeu.
-     * @param i ligne du 1er pion
-     * @param j colonne du 1er pion
-     * @return retourne un booleen qui indique s'il y a un chemin qui parcours tout les pions restant du joueur
-     */
-    public boolean parcoursChemin(int i, int j) {
-    	ArrayList<Couple> visites = new ArrayList<Couple>();
-    	parcoursProfondeur(i,j,visites);
-    	if(this.tab[i][j]==NOIR && visites.size() == this.nbPionNoir){
-    		return true;
-    	}
-    	if(this.tab[i][j]==BLANC && visites.size() == this.nbPionBlanc){
-    		return true;
-    	}
-		return false;
-	}
-
-
-    /**
-     * Fonction de parcours du plateau en partant d'un pion. On parcours le plateau comme si on explorait un graphe
-     * @param i ligne où se situe le pion de départ
-     * @param j colonne où se situe le pion de départ
-     * @param sommetsVisites ArrayList de Couple servant à représenter les sommets visités lors du parcours
-     */
-    private void parcoursProfondeur(int i,int j, 
-    		ArrayList<Couple> sommetsVisites) {
-    	Couple s = new Couple(i,j);
-    	sommetsVisites.add(s);
-    	ArrayList<Couple> al = this.voisin(i,j);
-    	Iterator<Couple> it = al.iterator();
-    	while (it.hasNext()) { 
-    		Couple suivant = (Couple)it.next();
-    		if (!sommetsVisites.contains(suivant)) {
-    			parcoursProfondeur(suivant.getI(),suivant.getJ(), sommetsVisites);
-    		}
-    	}
-    }
-    /**
-     * Cette fonction permet d'obtenir une liste des pions adjacents à celui se trouvant 
-     * en (i,j) et de la même couleur que celui-ci.
-     * @param i ligne
-     * @param j colonne
-     * @return une liste des pions voisins du même joueur
-     */
-    private ArrayList<Couple> voisin(int i,int j){
-    	ArrayList<Couple> res = new ArrayList<Couple>();
-    	if(i+1<DIMENSION && i+1>=0 && j+1<DIMENSION && j+1>=0)
-    	{
-    		if(this.tab[i][j]==this.tab[i+1][j+1]) {
-    			Couple c = new Couple(i+1,j+1);
-    			res.add(c);
-    		}
-    	}
-    	if(i<DIMENSION && i>=0 && j+1<DIMENSION && j+1>=0)
-    	{
-    		if(this.tab[i][j]==this.tab[i][j+1]) {
-    			Couple c = new Couple(i,j+1);
-    			res.add(c);
-    		}
-    	}
-    	if(i-1<DIMENSION && i-1>=0 && j+1<DIMENSION && j+1>=0)
-    	{
-    		if(this.tab[i][j]==this.tab[i-1][j+1]) {
-    			Couple c = new Couple(i-1,j+1);
-    			res.add(c);
-    		}
-    	}
-    	if(i+1<DIMENSION && i+1>=0 && j<DIMENSION && j>=0)
-    	{
-    		if(this.tab[i][j]==this.tab[i+1][j]) {
-    			Couple c = new Couple(i+1,j);
-    			res.add(c);
-    		}
-    	}
-    	if(i+1<DIMENSION && i+1>=0 && j-1<DIMENSION && j-1>=0)
-    	{
-    		if(this.tab[i][j]==this.tab[i+1][j-1]) {
-    			Couple c = new Couple(i+1,j-1);
-    			res.add(c);
-    		}
-    	}
-    	if(i-1<DIMENSION && i-1>=0 && j-1<DIMENSION && j-1>=0)
-    	{
-    		if(this.tab[i][j]==this.tab[i-1][j-1]) {
-    			Couple c = new Couple(i-1,j-1);
-    			res.add(c);
-    		}
-    	}
-    	if(i<DIMENSION && i>=0 && j-1<DIMENSION && j-1>=0)
-    	{
-    		if(this.tab[i][j]==this.tab[i][j-1]) {
-    			Couple c = new Couple(i,j-1);
-    			res.add(c);
-    		}
-    	}
-    	if(i-1<DIMENSION && i-1>=0 && j<DIMENSION && j>=0)
-    	{
-    		if(this.tab[i][j]==this.tab[i-1][j]) {
-    			Couple c = new Couple(i-1,j);
-    			res.add(c);
-    		}
-    	}
-    	return res;
-    }
-    
-    /* (non-Javadoc)
-     * @see moteur.Partie1#play(java.lang.String, java.lang.String)
-     */
-    public void play(String move, String player) {
-            Couple[] c = trad(move);
-            // ULTIME (2026) : mise à jour de l'empreinte par XOR, sans tout recalculer :
-            // le pion quitte sa case, l'éventuel pion capturé disparaît, le pion arrive.
-            byte pion = tab[c[0].getI()][c[0].getJ()], cible = tab[c[1].getI()][c[1].getJ()];
-            hash ^= ZOBRIST[indice(pion)][c[0].getI()][c[0].getJ()];
-            if (cible != 0) hash ^= ZOBRIST[indice(cible)][c[1].getI()][c[1].getJ()];
-            hash ^= ZOBRIST[indice(pion)][c[1].getI()][c[1].getJ()];
-            tab[c[1].getI()][c[1].getJ()] = tab[c[0].getI()][c[0].getJ()];
-            tab[c[0].getI()][c[0].getJ()] = 0;
-            this.updateNbPion();
+        return relie(NOIR) || relie(BLANC);
     }
 
-    /**
-     * @return the tab
-     */
-    public byte[][] getTab() {
-        return tab;
-    }
-
-    /**
-     * @param tab the tab to set
-     */
-    public void setTab(byte[][] tab) {
-        this.tab = tab;
+    public Plateau copy() {
+        Plateau p = new Plateau();
+        System.arraycopy(cases, 0, p.cases, 0, 64);
+        p.noirs = noirs;
+        p.blancs = blancs;
+        p.hash = hash;
+        return p;
     }
 
     public String toString() {
-    	String ligne="";
-    	char c;
-    	for(int j = DIMENSION-1 ;j>=0; j--) {	
-    		for(int i = 0 ;i<DIMENSION; i++) {
-				if(this.tab[i][j] == NOIR)
-					c = PION_NOIR;
-				else if (this.tab[i][j] == BLANC)
-					c = PION_BLANC;
-				else 
-					c = '.';
-				ligne += c+" ";
-			}
-			ligne+="\n";
-    	}
-    	return ligne;
+        StringBuilder ligne = new StringBuilder();
+        for (int l = 7; l >= 0; l--) {
+            for (int c = 0; c < 8; c++)
+                ligne.append(cases[c * 8 + l] == NOIR ? 'X' : cases[c * 8 + l] == BLANC ? 'O' : '.').append(' ');
+            ligne.append('\n');
+        }
+        return ligne.toString();
     }
-    
-    
-    /**
-     * Dresse la liste des coups possible pour un joueur donnée
-     * @param cJoueur la couleur permettant d'identifier le joueur
-     * @return un objet de type ArrayList<String> contenant l'ensemble de coup possible pour le joueur cJoueur
-     * à un instant donné
-     */
-    public ArrayList<String> coupsPossibles (String cJoueur) {
-    	ArrayList<String> resultat = new ArrayList<String>();
-    	int i = 0 , j,nbPion,verticale,horizontal,slash,antislash;
-    	byte couleurId;
-    	if(cJoueur.compareToIgnoreCase("noir") == 0) { 
-    		nbPion = this.nbPionNoir;
-    		couleurId = this.NOIR;
-    	} else {
-    		nbPion = this.nbPionBlanc;
-    		couleurId = this.BLANC;
-    	}
-    	while(i<this.DIMENSION && nbPion > 0) {
-    		j=0;
-    		while(j<this.DIMENSION && nbPion > 0) {
-    			if(this.tab[i][j] == couleurId) {
-    				verticale=this.compteVerticale(i);
-    				horizontal=this.compteHorizonztale(j);
-    				slash=this.compteSlash(i, j);
-    				antislash=this.compteAntiSlash(i, j);
-    				Couple origine = new Couple(i,j);
-    				Couple destination = null;
-    				Couple [] tabCoup = new Couple [8];
-    				if (j+verticale < DIMENSION)
-    					tabCoup[0] = new Couple (i,j+verticale);
-    				else 
-    					tabCoup[0] = null;
-    				if (j-verticale < DIMENSION)
-    					tabCoup[1] = new Couple (i,j-verticale);
-    				else
-    					tabCoup[1] = null;
-    				if(i+horizontal < DIMENSION)
-    					tabCoup[2] = new Couple (i+horizontal,j);
-    				else
-    					tabCoup[2] = null;
-    				if (i-horizontal < DIMENSION) 
-    					tabCoup[3] = new Couple (i-horizontal,j);
-    				else
-    					tabCoup[3] = null;
-    				if(i-antislash< DIMENSION && j+antislash < DIMENSION)
-    					tabCoup[4] = new Couple (i-antislash,j+antislash);
-    				else
-    					tabCoup[4] = null;
-    				if(i+antislash < DIMENSION && j-antislash < DIMENSION)
-    					tabCoup[5] = new Couple (i+antislash,j-antislash);
-    				else
-    					tabCoup[5] = null;
-    				if(i+slash < DIMENSION && j+slash < DIMENSION)
-    					tabCoup[6] = new Couple (i+slash,j+slash);
-    				else
-    					tabCoup[6] = null;
-    				if(i-slash < DIMENSION && j-slash < DIMENSION)
-    					tabCoup[7] = new Couple (i-slash,j-slash);
-    				else
-    					tabCoup[7] = null;
-    				for(int v = 0;v<=7;v++) {
-    					if(tabCoup[v] != null) {
-		    				destination = tabCoup[v];
-		    				String toto = origine.toString()+"-"+destination.toString();
-	    					if(this.estValide(origine.toString()+"-"+destination.toString(), cJoueur)){
-		    					resultat.add(origine.toString()+"-"+destination.toString());
-		    				}
-    					}
-    				}
-    				nbPion --;
-    			}
-    			j++;
-    		}
-    		i++;
-    	}
-    	return resultat;
-    }
-    
-    /**
-     * fonction de mise à jour du nombre de pion présent sur le plateau de jeu
-     */
-    private void updateNbPion() {
-    	int noir = 0 , blanc = 0;
-    	for(int i = 0 ;i<DIMENSION; i++)	
-    		for(int j = 0 ;j<DIMENSION; j++) {
-    			if(this.getTab()[i][j] == BLANC)
-    				blanc++;
-    			else if (this.getTab()[i][j] == NOIR)
-    				noir++;
-    		}
-    	this.nbPionBlanc = blanc;
-    	this.nbPionNoir = noir;
-    }
-    
-    /**
-     * realise un copie du plateau de jeu (duplique)
-     * @return la copie du plateau de jeu
-     */
-    public Plateau copy(){
-    	Plateau p = new Plateau();
-    	for(int i=0;i<this.DIMENSION;i++)
-    		for(int j = 0 ; j<this.DIMENSION;j++){
-    			p.tab[i][j]=this.tab[i][j];
-    		}
-    	p.nbPionBlanc=this.nbPionBlanc;
-    	p.nbPionNoir=this.nbPionNoir;
-    	p.hash=this.hash; // ULTIME (2026) : la copie garde la même empreinte
-    	return p;
-    }
-    
 }

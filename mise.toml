@@ -1,0 +1,3 @@
+# Version de Java du projet, pour mise (https://mise.jdx.dev) : « mise install » puis les scripts de construction.
+[tools]
+java = "21"

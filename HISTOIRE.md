@@ -110,3 +110,41 @@ le plateau de 2008 copie toute la position pour chaque coup essayé et manipule 
 alors que Rival joue et annule ses coups sur un seul tableau d'entiers ; il explore donc bien plus de positions
 dans le même temps. Prochaines étapes : accélérer le plateau, puis ajuster les poids des critères en faisant
 s'affronter des variantes, comme le proposait la conclusion du rapport de 2008.
+
+## L'algo ultime, version rapide
+
+L'étape `v2026-ultime-rapide` réécrit le plateau d'Ultime pour la vitesse, sans toucher aux règles ni à
+l'évaluation. Ultime passe de 1 451 à 679 lignes.
+
+- **Jouer puis annuler.** La recherche travaille sur un seul plateau : elle joue un coup, explore, puis
+  l'annule grâce à une petite pile qui retient le coup et le pion éventuellement pris. Avant, chaque coup essayé
+  copiait les 64 cases et recomptait tous les pions.
+- **Des coups en entiers.** Une case est numérotée `colonne × 8 + ligne` (A1 = 0, B1 = 8, H8 = 63) et un coup
+  vaut `départ × 64 + arrivée` : `B1-D3` devient 8 × 64 + 26 = 538. C'est un nombre à deux chiffres en base 64,
+  qu'on relit avec `coup >>> 6` (le départ) et `coup & 63` (l'arrivée). Les chaînes ne servent plus qu'à parler au
+  serveur.
+- **Des bitboards.** Les pions de chaque couleur sont aussi rangés dans un `long` de 64 bits, un bit par case.
+  Compter les pions d'une ligne, qui fixe la longueur d'un déplacement, devient `Long.bitCount(occupé & ligne)`.
+  Un groupe de pions voisins se trouve en décalant les bits d'une case dans les 8 directions jusqu'à ce que le
+  groupe ne grandisse plus, au lieu du parcours récursif avec des `ArrayList<Couple>`.
+- **La même évaluation, au chiffre près.** Les critères de 2008 sont recalculés sur les bitboards ;
+  `tests/arbitre/CheckUltimeEval` vérifie sur 23 904 positions qu'ils donnent exactement le même nombre que le
+  code de 2008, pour les deux couleurs et les quatre niveaux.
+
+En chemin, un bug de 2008 est apparu : `finDePartie()` s'arrêtait après les deux premiers pions rencontrés,
+même s'ils étaient de la même couleur. Sur le plateau de départ, ce sont A2 et A3, deux pions blancs : une
+victoire de Noir n'était jamais détectée tant que la colonne A gardait deux pions blancs. Il est corrigé dans
+la version corrigée (`moteur/Plateau.java`) comme dans Ultime.
+
+Le nouveau plateau explore 3,1 millions de positions par seconde, contre 159 000 avant, soit environ 19,5 fois
+plus.
+
+| Match (2 min par joueur) | Résultat |
+|---|---|
+| Ultime rapide contre l'ancien Ultime | **4 – 0** |
+| Ultime rapide contre la version corrigée | **2 – 0** |
+| Ultime rapide contre Rival | 1 – 5 |
+
+La vitesse suffit à écraser l'ancien Ultime, mais pas à battre Rival : à recherche comparable, c'est maintenant
+l'évaluation qui fait la différence. Prochaine étape : ajuster les poids des critères en faisant s'affronter des
+variantes, comme le proposait la conclusion du rapport de 2008.

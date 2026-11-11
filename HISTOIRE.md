@@ -86,3 +86,27 @@ la concentration et la prudence sur les captures, reste plus riche que la sienne
 
 En 2008, l'IA a gagné plus de la moitié de ses matchs du tournoi, souvent parce que l'adversaire jouait un coup
 illégal : son plateau refusait parfois des coups légaux, mais n'en acceptait jamais d'illégaux.
+
+## L'algo ultime
+
+L'étape `v2026-ultime` (dossier `ultime/`) part du code de 2008 corrigé et garde son évaluation
+(concentration, chaîne la plus longue, centralisation, nombre de pions et de voisins). Ce qui change :
+
+- **approfondissement itératif** : NegaScout cherche à profondeur 1, puis 2, puis 3… jusqu'à épuiser le temps
+  accordé au coup (1/25 du temps restant), à la place de la profondeur adaptative et du « mode panique » ;
+- **table de transposition** indexée par une empreinte de Zobrist ajoutée au plateau ;
+- **ordre des coups** : le meilleur coup mémorisé, puis les captures, puis les coups vers le centre ;
+- **bibliothèque d'ouvertures**, calculée à l'avance (10 secondes de recherche par position) à la place des
+  coups aléatoires : les deux premiers coups sont instantanés ;
+- plus de coups au hasard.
+
+| Match (2 min par joueur) | Résultat |
+|---|---|
+| Ultime contre la version corrigée | **2 – 0** |
+| Ultime contre Rival (sans bibliothèque d'ouvertures) | 1 – 3 |
+
+À évaluation égale, la recherche moderne suffit à battre la version corrigée. Elle ne suffit pas contre Rival :
+le plateau de 2008 copie toute la position pour chaque coup essayé et manipule les coups sous forme de chaînes,
+alors que Rival joue et annule ses coups sur un seul tableau d'entiers ; il explore donc bien plus de positions
+dans le même temps. Prochaines étapes : accélérer le plateau, puis ajuster les poids des critères en faisant
+s'affronter des variantes, comme le proposait la conclusion du rapport de 2008.

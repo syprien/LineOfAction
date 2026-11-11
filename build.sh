@@ -20,7 +20,7 @@ CLASSES="build/classes$SUFFIXE"
 rm -rf "$CLASSES"
 mkdir -p "$CLASSES" build/tournoi
 SOURCES=()
-for p in net moteur ia jeux devoirLOA arbitre rival; do
+for p in net moteur ia jeux devoirLOA arbitre rival ultime; do
   [ -d "$SRC/$p" ] && while IFS= read -r f; do SOURCES+=("$f"); done < <(find "$SRC/$p" -name '*.java')
 done
 javac -nowarn --release 11 -encoding UTF-8 -d "$CLASSES" "${SOURCES[@]}"
@@ -37,4 +37,5 @@ fabriquer_jar "TazzzzSyprien$SUFFIXE" devoirLOA.ClientJoueurReseauIALOA
 if [ -z "$SUFFIXE" ]; then
   fabriquer_jar Arbitre arbitre.Arbitre
   fabriquer_jar Rival rival.Rival
+  fabriquer_jar Ultime ultime.devoirLOA.ClientJoueurReseauIALOA
 fi

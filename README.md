@@ -26,6 +26,7 @@ Les étapes de 2008 antérieures au rendu ne contiennent que les fichiers envoy�
 | `v2026-arbitre` | 2026 | un arbitre pour rejouer le tournoi, et les scripts de construction |
 | `v2026-rival` | 2026 | Rival, une IA écrite par Claude Haiku avec la même limite de taille |
 | `v2026-histoire` | 2026 | ce README et l'histoire du projet |
+| `v2026-ultime` | 2026 | l'algo ultime : l'évaluation de 2008 avec une recherche moderne et une bibliothèque d'ouvertures |
 
 Pour voir toutes les corrections, avec leurs explications :
 
@@ -68,6 +69,7 @@ avec `java -jar TazzzzSyprien.jar localhost 1234 TazzzzSyprien`.
 | `net/` | le client réseau (réécrit en 2026, l'original était fourni par l'enseignant) |
 | `arbitre/` | l'arbitre du tournoi (2026) |
 | `rival/` | l'IA rivale écrite par Claude Haiku (2026) |
+| `ultime/` | l'algo ultime (2026) : produit `Ultime.jar` |
 | `tests/` | auto-parties, mesures de temps, vérification croisée des règles (2026) |
 | `rapports/` | les rapports de 2008, transcrits en Markdown |
 

@@ -22,7 +22,7 @@ if ($Etiquette) {
 $classes = "build/classes$suffixe"
 if (Test-Path $classes) { Remove-Item -Recurse -Force $classes }
 New-Item -ItemType Directory -Force $classes, "build/tournoi" | Out-Null
-$sources = foreach ($p in "net", "moteur", "ia", "jeux", "devoirLOA", "arbitre", "rival") {
+$sources = foreach ($p in "net", "moteur", "ia", "jeux", "devoirLOA", "arbitre", "rival", "ultime") {
     if (Test-Path "$src/$p") { Get-ChildItem -Recurse -Filter *.java "$src/$p" | ForEach-Object FullName }
 }
 javac -nowarn --release 11 -encoding UTF-8 -d $classes @sources
@@ -40,4 +40,5 @@ Fabriquer-Jar "TazzzzSyprien$suffixe" devoirLOA.ClientJoueurReseauIALOA
 if (-not $suffixe) {
     Fabriquer-Jar Arbitre arbitre.Arbitre
     Fabriquer-Jar Rival rival.Rival
+    Fabriquer-Jar Ultime ultime.devoirLOA.ClientJoueurReseauIALOA
 }

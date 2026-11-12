@@ -1,7 +1,10 @@
 //! L'algo ultime en Rust : le même joueur que Ultime.jar, pour comparer les deux langages.
 //!   ultime <machine> <port> <id>        joue une partie contre l'arbitre (comme les .jar)
 //!   ultime verifier <fichier>           compare avec les positions exportées par tests/ExportUltime.java
-//!   ultime bench <profondeur>           temps d'une recherche à profondeur fixe (comme tests/BenchUltime.java)
+//!   ultime bench <prof> [fils] [bits]  temps d'une recherche à profondeur fixe (comme tests/BenchUltime.java)
+//! Nombre de fils (threads) pour jouer : option --fils N, sinon variable ULTIME_FILS, sinon un suffixe
+//! « -N » dans le nom de l'exécutable (UltimeRust-16.exe : 16 fils ; l'arbitre ne passe que trois
+//! arguments), sinon 1.
 
 mod eval;
 mod negascout;
@@ -17,12 +20,34 @@ use negascout::NegaScout;
 use ouvertures::Ouvertures;
 use plateau::{couleur, JavaRandom, Plateau, NOIR};
 
+/// Taille de la table en partie : 2^22 cases, 64 Mo, partagée par tous les fils.
+const BITS_PARTIE: u32 = 22;
+
+/// Nombre de fils : --fils N, sinon ULTIME_FILS, sinon le suffixe « -N » du nom de l'exécutable, sinon 1.
+fn nombre_de_fils(args: &mut Vec<String>) -> usize {
+    if let Some(i) = args.iter().position(|a| a == "--fils") {
+        let n = args.get(i + 1).and_then(|s| s.parse().ok()).expect("--fils <nombre>");
+        args.drain(i..i + 2);
+        return n;
+    }
+    if let Some(n) = std::env::var("ULTIME_FILS").ok().and_then(|s| s.parse().ok()) {
+        return n;
+    }
+    let nom = std::path::Path::new(&args[0]).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    nom.rsplit_once('-').and_then(|(_, n)| n.parse().ok()).unwrap_or(1)
+}
+
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().collect();
+    let mut args: Vec<String> = std::env::args().collect();
+    let fils = nombre_de_fils(&mut args);
     match args.get(1).map(|s| s.as_str()) {
         Some("verifier") if args.len() == 3 => verifier(&args[2]),
-        Some("bench") if args.len() == 3 => bench(args[2].parse().expect("profondeur")),
-        _ if args.len() == 4 => match jouer(&args[1], &args[2], &args[3]) {
+        Some("bench") if args.len() >= 3 => bench(
+            args[2].parse().expect("profondeur"),
+            args.get(3).map_or(1, |s| s.parse().expect("fils")),
+            args.get(4).map_or(18, |s| s.parse().expect("bits")),
+        ),
+        _ if args.len() == 4 => match jouer(&args[1], &args[2], &args[3], fils) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 println!("Connexion à {}:{} impossible ou interrompue : {}", args[1], args[2], e);
@@ -30,7 +55,7 @@ fn main() -> ExitCode {
             }
         },
         _ => {
-            println!("Usage : ultime <machine> <port> <id> | ultime verifier <fichier> | ultime bench <profondeur>");
+            println!("Usage : ultime <machine> <port> <id> | ultime verifier <fichier> | ultime bench <profondeur> [fils] [bits] ; option --fils N");
             ExitCode::FAILURE
         }
     }
@@ -52,10 +77,10 @@ fn attendre(lignes: &mut impl Iterator<Item = std::io::Result<String>>, entete: 
 }
 
 /// Le dialogue de net/ClientJeu.java et les choix de ultime/devoirLOA/JoueurReseauIALOA.java.
-fn jouer(machine: &str, port: &str, identifiant: &str) -> std::io::Result<()> {
+fn jouer(machine: &str, port: &str, identifiant: &str, fils: usize) -> std::io::Result<()> {
     let flux = TcpStream::connect(format!("{}:{}", machine, port))?;
     flux.set_nodelay(true)?;
-    println!("Connexion à {}:{}", machine, port);
+    println!("Connexion à {}:{} ({} fil(s), table de 2^{} cases)", machine, port, fils, BITS_PARTIE);
     let mut sortie = flux.try_clone()?;
     let mut lignes = BufReader::new(flux).lines();
     writeln!(sortie, "{}", identifiant)?;
@@ -66,7 +91,7 @@ fn jouer(machine: &str, port: &str, identifiant: &str) -> std::io::Result<()> {
 
     let livre = Ouvertures::charger();
     let mut p = Plateau::new();
-    let mut recherche = NegaScout::new(Some(eval::POIDS));
+    let mut recherche = NegaScout::new(Some(eval::POIDS), fils, BITS_PARTIE);
     let mut temps: u64 = 300_000;
     let mut disqualification = false;
     while !disqualification && !p.fin_de_partie() {
@@ -134,7 +159,7 @@ fn verifier(fichier: &str) -> ExitCode {
         ];
         let mut attendu: Vec<String> = f[2..6].iter().map(|s| s.to_string()).collect();
         if f[6] != "-" || f[7] != "-" {
-            let mut ns = NegaScout::new(Some(eval::POIDS));
+            let mut ns = NegaScout::new(Some(eval::POIDS), 1, 18); // comme Java : un fil, 2^18 cases
             let c = ns.meilleur_coup(&mut p, f[1], 1_000_000, 4).unwrap_or_else(|| "-".to_string());
             obtenu.push(format!("{} {}", c, ns.noeuds()));
             attendu.push(format!("{} {}", f[6], f[7]));
@@ -155,8 +180,10 @@ fn verifier(fichier: &str) -> ExitCode {
 }
 
 /// Les 8 positions de tests/BenchUltime.java (mêmes coups au hasard, même générateur), cherchées à
-/// profondeur fixe : Rust et Java font exactement le même travail, seul le temps diffère.
-fn bench(profondeur: i32) -> ExitCode {
+/// profondeur fixe : avec un fil et une table de 2^18 cases, Rust et Java font exactement le même
+/// travail, seul le temps diffère. Avec plusieurs fils (table de 2^bits cases), on mesure le temps
+/// pour atteindre la profondeur : les fils d'appoint font du travail en plus, qui accélère le principal.
+fn bench(profondeur: i32, fils: usize, bits: u32) -> ExitCode {
     let mut r = JavaRandom::new(7);
     let mut positions = Vec::new();
     for k in 0..8 {
@@ -171,9 +198,10 @@ fn bench(profondeur: i32) -> ExitCode {
         positions.push((p, if trait_ == NOIR { "noir" } else { "blanc" }));
     }
     for passe in 1..=2 {
+        // Les tables sont créées avant de lancer le chronomètre (64 Mo à mettre à zéro, ça se voit).
+        let mut recherches: Vec<NegaScout> = (0..8).map(|_| NegaScout::new(Some(eval::POIDS), fils, bits)).collect();
         let (debut, mut noeuds, mut choix) = (Instant::now(), 0, String::new());
-        for (p, joueur) in positions.iter_mut() {
-            let mut ns = NegaScout::new(Some(eval::POIDS));
+        for ((p, joueur), ns) in positions.iter_mut().zip(recherches.iter_mut()) {
             choix += &ns.meilleur_coup(p, joueur, 1_000_000, profondeur).unwrap();
             choix += " ";
             noeuds += ns.noeuds();

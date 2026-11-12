@@ -30,6 +30,7 @@ Les étapes de 2008 antérieures au rendu ne contiennent que les fichiers envoy�
 | `v2026-ultime-rapide` | 2026 | l'algo ultime avec un plateau rapide : bitboards, coups en entiers, jouer puis annuler |
 | `v2026-ultime-poids` | 2026 | les poids des critères ajustés par sélection naturelle, comme le proposait le rapport |
 | `v2026-ultime-rust` | 2026 | l'algo ultime porté en Rust, pour comparer les deux langages |
+| `v2026-ultime-rust-fils` | 2026 | la version Rust sur plusieurs fils (threads) : « Young Brothers Wait » |
 
 Pour voir toutes les corrections, avec leurs explications :
 
@@ -71,6 +72,9 @@ cp ultime-rs/target/release/ultime.exe build/tournoi/UltimeRust.exe   # « ultim
 cd build/tournoi
 java -jar Arbitre.jar --j1 UltimeRust.exe --j2 Ultime.jar --parties 6 --temps 120000 --logs traces
 ```
+
+Pour jouer avec plusieurs fils (threads), on met le nombre dans le nom de l'exécutable : `UltimeRust-16.exe` joue avec
+16 fils (ou bien la variable d'environnement `ULTIME_FILS`, ou l'option `--fils N` en lançant le joueur à la main).
 
 ## Organisation du code
 

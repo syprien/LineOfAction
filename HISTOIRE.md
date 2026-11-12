@@ -235,3 +235,41 @@ transposition (6 Mo), là où la machine virtuelle Java se réserve d'office un 
 Java est excellent sur ce genre de code (des entiers et des tableaux, aucun objet), et 30 % de positions en plus ne
 suffisent pas à voir un coup plus loin : la profondeur atteinte est la même. Sur 6 parties, le 5 – 1 n'est pas
 une preuve ; le plus gros gain reste celui du changement d'algorithme du plateau (×19,5), sur la même machine.
+
+## L'algo ultime en Rust, sur plusieurs fils
+
+À un seul fil, Rust n'apportait que 30 % de positions en plus, pas un coup de profondeur. L'étape
+`v2026-ultime-rust-fils` fait travailler les 16 cœurs de la machine. La table de transposition devient partagée et
+sans verrou : chaque case tient dans deux entiers atomiques, (clé XOR données) et (données), et une case écrite par
+deux fils en même temps ne redonne plus la clé, elle est simplement ignorée. Rust interdit à la compilation qu'un
+fil modifie une donnée partagée sans protection, ou survive aux données qu'il emprunte.
+
+Paralléliser l'alpha-bêta n'est pas si facile : il est séquentiel par nature, puisque chaque coup se sert du score
+des précédents pour couper. Trois essais, mesurés par le temps qu'il faut au fil principal pour atteindre la
+profondeur 8 sur 8 positions (`ultime bench 8 <fils> 22`) :
+
+| Méthode | 4 fils | 8 fils | 16 fils |
+|---|---|---|---|
+| « Lazy SMP » : tous les fils cherchent tout l'arbre, un sur deux une profondeur plus loin | aucun gain | aucun gain | aucun gain |
+| partage des coups de la racine | ×1,9 | ×2,4 | ×2,8 |
+| **« Young Brothers Wait » le long de la ligne principale** | **×2,7** | **×4,7** | **×6,2** |
+
+- Le *Lazy SMP* (la méthode de Stockfish) ne donne rien ici : notre ordre des coups est déterministe, les fils
+  parcourent l'arbre dans le même ordre, et un fil plus profond, donc plus lent par branche, est aussitôt dépassé
+  par le principal. Il n'a jamais fini une branche avant que le principal n'y arrive.
+- Partager les coups de la racine plafonne vers ×3 : le premier coup, cherché par un seul fil, pèse un tiers du
+  travail (loi d'Amdahl).
+- Le *Young Brothers Wait* (Feldmann, vers 1990) applique la règle « on n'explore les jeunes frères en parallèle
+  qu'une fois l'aîné cherché » à la racine, puis dans l'aîné de la racine, puis dans son aîné, et ainsi de suite
+  le long de la ligne principale. L'aîné donne la borne alpha, les jeunes frères n'ont plus qu'à vérifier qu'ils ne
+  font pas mieux : le nombre total de positions explorées ne bouge pas, rien n'est cherché à l'aveugle.
+
+Avec un seul fil, la recherche reste identique à la version Java, au nœud près (`ultime verifier`).
+
+| Match (2 min par joueur) | Résultat |
+|---|---|
+| Ultime en Rust, 16 fils, contre Ultime en Java | **9 – 1** |
+
+En partie, Rust à 16 fils étudie 22,6 millions de positions par seconde contre 3,0 millions pour Java, et atteint en
+moyenne la profondeur 8,3 contre 7,7. La première partie d'essai, à 30 secondes, avait pourtant été perdue : à elle
+seule, la vitesse ne prouve rien, il faut des matchs.
